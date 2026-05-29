@@ -1,0 +1,9 @@
+# database
+data/
+
+# build files
+bin/
+
+# Emacs backup
+*~
+\#*\#
