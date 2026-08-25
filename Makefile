@@ -25,8 +25,10 @@ OBJ_DIR  := obj
 # =========================
 
 COMMON_BASE_SRC  := \
+	src/common/node.cpp \
 	src/common/zdd_geister.cpp \
-	src/common/posi_geister.cpp
+	src/common/posi_geister.cpp \
+	src/common/table.cpp
 
 ANALYSIS_COMMON_SRC  := \
 	$(COMMON_BASE_SRC)
