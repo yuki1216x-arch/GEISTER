@@ -81,8 +81,7 @@ Table::Table(int iter, const char* read_file_name, size_t bits_per_entry, unsign
     for(size_t tableid = 0; tableid < m_table_size; tableid++) m_table[tableid] = 0ULL; //全ての表を0にする
   } else {
     {
-      unsigned long long int nwin = 0, nlose = 0, nunknown = 0, lunknown = 0,
-	ncanwinlose = 0, ncanwin = 0, ncanlose = 0;
+      unsigned long long int nwin = 0, nlose = 0, nunknown = 0, lunknown = 0, ncanlose = 0;
 
       cout << "aaaa" << endl;
       InTable in_table(iter, read_file_name, placement_size);
@@ -97,10 +96,6 @@ Table::Table(int iter, const char* read_file_name, size_t bits_per_entry, unsign
 	    nwin++;
 	  } else if(value == v_lose) {
 	    nlose++;
-	  } else if(value == v_can_win_lose) {
-	    ncanwinlose++;
-	  } else if(value == v_can_win) {
-	    ncanwin++;
 	  } else if(value == v_can_lose) {
 	    ncanlose++;
 	  } else {
@@ -112,8 +107,6 @@ Table::Table(int iter, const char* read_file_name, size_t bits_per_entry, unsign
 
 	cout << "before nwin = " << nwin << endl;
 	cout << "before nlose = " << nlose << endl;
-	cout << "before ncanwinlose = " << ncanwinlose << endl;
-	cout << "before ncanwin = " << ncanwin << endl;
 	cout << "before ncanlose = " << ncanlose << endl;
 	cout << "before nunknown = " << nunknown << endl;
 	cout << "last unknown = " << lunknown << endl;

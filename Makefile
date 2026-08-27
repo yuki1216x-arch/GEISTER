@@ -60,6 +60,12 @@ all: $(TARGETS)
 # =========================
 
 # analysis
+# Purple version
+$(BIN_DIR)/main_purple: $(ANALYSIS_DIR)/main_purple.cpp $(ANALYSIS_COMMON_SRC)
+	@mkdir -p $(BIN_DIR)
+	$(CXX) $(CXXFLAGS) -DUSE_PURPLE $(INCLUDES) $^ -o $@
+
+# Other analysis programs
 $(BIN_DIR)/%: $(ANALYSIS_DIR)/%.cpp $(ANALYSIS_COMMON_SRC)
 	@mkdir -p $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@

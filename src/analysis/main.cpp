@@ -160,7 +160,7 @@ constexpr unsigned long long int placement_count[5][5][9] {
 
 const string base[2] = {"self_table", "enemy_table"};
 	  
-unsigned long long int nwin = 0, nlose = 0, ncan_win_lose = 0, ncan_win = 0, ncan_lose = 0; // lunknownが最後のunknownの番号(-1しておく)
+unsigned long long int nwin = 0, nlose = 0, ncan_lose = 0; // lunknownが最後のunknownの番号(-1しておく)
 
 unsigned long long int count_changes = 0ULL;   //更新があった回数(0になるまで探索を繰り返す)
 
@@ -175,7 +175,7 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
 		 const Table& child_table_opp) noexcept {
   std::cout << "boss" << endl;
 
-  nwin = 0, nlose = 0, ncan_win_lose = 0, ncan_win = 0, ncan_lose = 0;
+  nwin = 0, nlose = 0, ncan_lose = 0;
   count_changes = 0ULL;
   
   unsigned long long int max_placement = placement_count[num_b][num_r][num_eb + num_er];
@@ -207,7 +207,7 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
       // 後退解析の表を使う。
       // add only unknown id
       unsigned int before_value;
-      while(count_input < max_placement && (before_value = parent_table.get(count_input)) != v_unknown && before_value != v_can_win && before_value != v_can_lose) {
+      while(count_input < max_placement && (before_value = parent_table.get(count_input)) != v_unknown && before_value != v_can_lose) {
 	count_input++;      //ここで今求めたunknownのidの値が入る
 	count_output++;     //ここで今求めたunknownのidの値が入る
       }
@@ -247,7 +247,7 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
 	  unsigned long long int id = deq_tmp[workid]->get_id();  //workに割り当てられている配置番号を見る
 	  unsigned int value = deq_tmp[workid]->get_value();
 	  
-	  if(value == v_unknown || value == v_can_win) {
+	  if(value == v_unknown) {
 	    int nchild, num_of_un;
 	    int captured_piece_type[max_legal_num][max_belief_state];
 	    long long int array_id[max_legal_num][max_belief_state];
@@ -261,8 +261,6 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
 	    for(int j = 0; j < num_of_action; j++) {
 	      int kati = 0;
 	      int make = 0;
-	      int katiarimakeari = 0;
-	      int katiari = 0;
 	      int makeari = 0;
 	      int humei = 0;
 	      for(int k = 0; k < num_of_un; k++) {
@@ -282,8 +280,6 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
 		  
 		  if(child_val == v_win) kati++;
 		  else if(child_val == v_lose) make++;
-		  else if(child_val == v_can_win_lose) katiarimakeari++;
-		  else if(child_val == v_can_win) katiari++;
 		  else if(child_val == v_can_lose) makeari++;
 		  else {
 		    assert(child_val == v_unknown);
@@ -313,21 +309,14 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
 		} else {
 		  win_plan_num++;
 		}
-	      } else if(make + katiarimakeari + makeari >= 1) { // can lose
+	      } else if(make + makeari >= 1) { // can lose
 		if(iter % 2 == 1) {
 		  can_lose_plan_num++;
 		} else {
 		  if(!already_decided) {
-		    if(value == v_unknown) {
-		      parent_table.set(id, v_can_lose);
-		      value = v_can_lose;
-		      ncan_lose++;
-		    } else {
-		      assert(value == v_can_win);
-		      parent_table.set(id, v_can_win_lose);
-		      value = v_can_win_lose;
-		      ncan_win_lose++;
-		    }
+		    parent_table.set(id, v_can_lose);
+		    value = v_can_lose;
+		    ncan_lose++;
 		    count_changes++;
 		    already_decided = true;
 		  }
@@ -339,16 +328,9 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
 	    if(!already_decided) {
 	      if(iter % 2 == 1) {
 		if(can_lose_plan_num == num_of_action) {  // can lose
-		  if(value == v_unknown) {
-		    parent_table.set(id, v_can_lose);
-		    value = v_can_lose;
-		    ncan_lose++;
-		  } else {
-		    assert(value == v_can_win);
-		    parent_table.set(id, v_can_win_lose);
-		    value = v_can_win_lose;
-		    ncan_win_lose++;
-		  }
+		  parent_table.set(id, v_can_lose);
+		  value = v_can_lose;
+		  ncan_lose++;
 		  count_changes++;
 		}
 	      } else {
@@ -374,8 +356,6 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
 	      for(int j = 0; j < num_of_un; j++) {
 		int kati = 0;
 		int make = 0;
-		int katiarimakeari = 0;
-		int katiari = 0;
 		int makeari = 0;
 		int humei = 0;
 		for(int k = 0; k < num_of_action; k++) {
@@ -396,8 +376,6 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
 		    
 		    if(child_val == v_win) kati++;
 		    else if(child_val == v_lose) make++;
-		    else if(child_val == v_can_win_lose) katiarimakeari++;
-		    else if(child_val == v_can_win) katiari++;
 		    else if(child_val == v_can_lose) makeari++;
 		    else {
 		      assert(child_val == v_unknown);
@@ -436,8 +414,6 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
 	      deq_tmp[workid]->get_opp(num_of_un, array_id_opp_e);
 	      int kati = 0;
 	      int make = 0;
-	      int katiarimakeari = 0;
-	      int katiari = 0;
 	      int makeari = 0;
 	      int humei = 0;
 	      for(int j = 0; j < num_of_un; j++) {
@@ -447,8 +423,6 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
 		    
 		if(child_val == v_win) kati++;
 		else if(child_val == v_lose) make++;
-		else if(child_val == v_can_win_lose) katiarimakeari++;
-		else if(child_val == v_can_win) katiari++;
 		else if(child_val == v_can_lose) makeari++;
 		else {
 		  assert(child_val == v_unknown);
@@ -479,7 +453,7 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
   
   cout << "before_outtable" << endl;
   {
-    OutTable out_table(iter, write_filename, max_placement, 4);
+    OutTable out_table(iter, write_filename, max_placement, 2);
     for (unsigned long long int i = 0; i < max_placement; i++) {
       out_table.write(parent_table.get(i));   // retrieve the value of id(i) and copy it directly
     }
@@ -513,7 +487,7 @@ static void worker(int iter, int num_b, int num_r, int num_eb, int num_er,
     // 整数値から、子供の整数値列挙 or ダイレクト勝ちありを求めて w に登録
     unsigned long long int id = w->get_id();
     unsigned int value = w->get_value();
-    if(value == v_unknown || value == v_can_win) {
+    if(value == v_unknown) {
       Posi p;
       p.make_posi(id, zdd_parent, num_b, num_r, num_eb, num_er);     //wのidのposiを作る
       Action actions[max_legal_num];
@@ -650,18 +624,18 @@ int main(int argc, char *argv[]) {
   unique_ptr<ZDD> zdd_self_opp_cap_b = make_unique<ZDD>(num_eb - 1, num_er, num_b + num_r);
   unique_ptr<ZDD> zdd_self_opp_cap_r = make_unique<ZDD>(num_eb, num_er - 1, num_b + num_r);
   
-  Table table_self(iteration - 2, filename_self.c_str(), 4, placement);
-  Table table_enemy(iteration - 1, filename_enemy.c_str(), 4, placement);
-  Table table_self_opp(iteration - 2, filename_self_opp.c_str(), 4, placement_opp);
-  Table table_enemy_opp(iteration - 1, filename_enemy_opp.c_str(), 4, placement_opp);
-  Table table_self_cap_b(0, filename_self_cap_b.c_str(), 4, placement_self_cap_b);
-  Table table_self_cap_r(0, filename_self_cap_r.c_str(), 4, placement_self_cap_r);
-  Table table_enemy_cap_b(0, filename_enemy_cap_b.c_str(), 4, placement_enemy_cap);
-  Table table_enemy_cap_r(0, filename_enemy_cap_r.c_str(), 4, placement_enemy_cap);
-  Table table_self_opp_cap_b(0, filename_self_opp_cap_b.c_str(), 4, placement_self_opp_cap_b);
-  Table table_self_opp_cap_r(0, filename_self_opp_cap_r.c_str(), 4, placement_self_opp_cap_r);
-  Table table_enemy_opp_cap_b(0, filename_enemy_opp_cap_b.c_str(), 4, placement_enemy_opp_cap);
-  Table table_enemy_opp_cap_r(0, filename_enemy_opp_cap_r.c_str(), 4, placement_enemy_opp_cap);
+  Table table_self(iteration - 2, filename_self.c_str(), 2, placement);
+  Table table_enemy(iteration - 1, filename_enemy.c_str(), 2, placement);
+  Table table_self_opp(iteration - 2, filename_self_opp.c_str(), 2, placement_opp);
+  Table table_enemy_opp(iteration - 1, filename_enemy_opp.c_str(), 2, placement_opp);
+  Table table_self_cap_b(0, filename_self_cap_b.c_str(), 2, placement_self_cap_b);
+  Table table_self_cap_r(0, filename_self_cap_r.c_str(), 2, placement_self_cap_r);
+  Table table_enemy_cap_b(0, filename_enemy_cap_b.c_str(), 2, placement_enemy_cap);
+  Table table_enemy_cap_r(0, filename_enemy_cap_r.c_str(), 2, placement_enemy_cap);
+  Table table_self_opp_cap_b(0, filename_self_opp_cap_b.c_str(), 2, placement_self_opp_cap_b);
+  Table table_self_opp_cap_r(0, filename_self_opp_cap_r.c_str(), 2, placement_self_opp_cap_r);
+  Table table_enemy_opp_cap_b(0, filename_enemy_opp_cap_b.c_str(), 2, placement_enemy_opp_cap);
+  Table table_enemy_opp_cap_r(0, filename_enemy_opp_cap_r.c_str(), 2, placement_enemy_opp_cap);
     
   while(true) {
     iteration++;

@@ -269,11 +269,16 @@ int Posi::make_action(const Action& action) noexcept {
     if(before == 30 || before == 35) result = -1; // win
     else {
       assert(before == 0 || before == 5);
+#ifdef USE_PURPLE
+      assert(m_array[before].piece == (unknown|enemy));
+      result = -2;
+#else
       if(m_array[before].piece == (blue|enemy)) result = -2; // lose
       else {
 	assert(m_array[before].piece == (red|enemy));
 	result = -1; // win(illegal move)
       }
+#endif
     }
     m_array[before] = tbl_objid2locinfo[0];
     return result;
@@ -284,19 +289,31 @@ int Posi::make_action(const Action& action) noexcept {
   assert(after >= 0 && after < 36);
   if((m_array[after].piece & COLOR_MASK) != empty) {
     char capture = m_array[after].piece;
-    if(capture == (blue|self)) {
-      m_self_blue_count--;
-      result = 1;
-    } else if(capture == (red|self)) {
-      m_self_red_count--;
-      result = 2;
-    } else if(capture == (blue|enemy)) {
-      m_enemy_blue_count--;
-      result = 1;
+    if((capture & PLAYER_MASK) == self) {
+      if(capture == (blue|self)) {
+	m_self_blue_count--;
+	result = 1;
+      } else {
+	assert(capture == (red|self));
+	m_self_red_count--;
+	result = 2;
+      }
     } else {
-      assert(capture == (red|enemy));
+      assert((capture & PLAYER_MASK) == enemy);
+#ifdef USE_PURPLE
+      assert(capture == (unknown|enemy));
       m_enemy_red_count--;
       result = 2;
+#else
+      if(capture == (blue|enemy)) {
+	m_enemy_blue_count--;
+	result = 1;
+      } else {
+	assert(capture == (red|enemy));
+	m_enemy_red_count--;
+	result = 2;
+      }
+#endif
     }
   }
   m_array[after] = m_array[before];

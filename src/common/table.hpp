@@ -14,8 +14,7 @@ using std::endl;
 using std::cerr;
 using std::terminate;
 
-enum { v_unknown = 0, v_win = 1, v_lose = 2, v_can_win_lose = 3, v_can_win = 4, v_can_lose = 5,
-       v_new_win = 9, v_new_lose = 10, v_new_can_win_lose = 11, v_new_can_win = 12, v_new_can_lose = 13};
+enum { v_unknown = 0, v_win = 1, v_lose = 2, v_can_lose = 3};
 
 class Table {
 private:
@@ -60,13 +59,13 @@ private:
   int m_num_keep;
   fstream m_ofs;
   size_t m_bits_per_entry;
-  unsigned long long int m_nwin, m_nlose, m_ncan_win_lose, m_ncan_win, m_ncan_lose, m_nunknown;
+  unsigned long long int m_nwin, m_nlose, m_ncan_lose, m_nunknown;
 
 public:
   OutTable() = delete;
   OutTable(int iter, const string &s, size_t num, size_t bits_per_entry) noexcept
     : m_buffer(0), m_num_keep(0), m_ofs(s, fstream::out | fstream::binary | fstream::trunc),
-      m_bits_per_entry(bits_per_entry), m_nwin(0), m_nlose(0), m_ncan_win_lose(0), m_ncan_win(0), m_ncan_lose(0), m_nunknown(0) {
+      m_bits_per_entry(bits_per_entry), m_nwin(0), m_nlose(0), m_ncan_lose(0), m_nunknown(0) {
     assert(s.size() > 0 && s.size() < 255);
     std::cout << "write" << endl;
     unsigned char header[8] = {0};
@@ -93,8 +92,6 @@ public:
   void write(unsigned int entry) noexcept {
     if(entry == v_win) m_nwin++;
     else if(entry == v_lose) m_nlose++;
-    else if(entry == v_can_win_lose) m_ncan_win_lose++;
-    else if(entry == v_can_win) m_ncan_win++;
     else if(entry == v_can_lose) m_ncan_lose++;
     else m_nunknown++;
     
@@ -115,8 +112,6 @@ public:
   void outinfo() const noexcept {
     cout << "nwin  = " << m_nwin << endl;
     cout << "nlose = " << m_nlose << endl;
-    cout << "ncan_win_lose  =  " << m_ncan_win_lose << endl;
-    cout << "ncan_win = " << m_ncan_win << endl;
     cout << "ncan_lose = " << m_ncan_lose << endl;
     cout << "nunknown = " << m_nunknown << endl;
     cout << endl;
