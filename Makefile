@@ -16,6 +16,7 @@ DEBUGFLAGS  := -g -O0 -fsanitize=address, undefined
 COMMON_DIR        := src/common
 ANALYSIS_DIR      := src/analysis
 VALIDATION_DIR    := src/validation
+LOOKUP_DIR        := src/lookup
 
 BIN_DIR  := bin
 OBJ_DIR  := obj
@@ -34,9 +35,12 @@ ANALYSIS_COMMON_SRC  := \
 	$(COMMON_BASE_SRC)
 VALIDATION_COMMON_SRC  := \
 	$(COMMON_BASE_SRC)
+LOOKUP_COMMON_SRC  := \
+	$(COMMON_BASE_SRC)
 
 ANALYSIS_SRC      := $(wildcard $(ANALYSIS_DIR)/*.cpp)
 VALIDATION_SRC    := $(wildcard $(VALIDATION_DIR)/*.cpp)
+LOOKUP_SRC        := $(wildcard $(LOOKUP_DIR)/*.cpp)
 
 # =========================
 # executable names
@@ -44,10 +48,12 @@ VALIDATION_SRC    := $(wildcard $(VALIDATION_DIR)/*.cpp)
 
 ANALYSIS_TARGETS      := $(patsubst $(ANALYSIS_DIR)/%.cpp,$(BIN_DIR)/%,$(ANALYSIS_SRC))
 VALIDATION_TARGETS    := $(patsubst $(VALIDATION_DIR)/%.cpp,$(BIN_DIR)/%,$(VALIDATION_SRC))
+LOOKUP_TARGETS        := $(patsubst $(LOOKUP_DIR)/%.cpp,$(BIN_DIR)/%,$(LOOKUP_SRC))
 
 TARGETS  := \
 	$(ANALYSIS_TARGETS) \
-	$(VALIDATION_TARGETS)
+	$(VALIDATION_TARGETS) \
+	$(LOOKUP_TARGETS)
 
 # =========================
 # default target
@@ -76,9 +82,9 @@ $(BIN_DIR)/%: $(VALIDATION_DIR)/%.cpp $(VALIDATION_COMMON_SRC)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@
 
 # lookup
-# $(BIN_DIR)/%: $(LOOKUP_DIR)/%.cpp $(LOOKUP_COMMON_SRC)
-#	@mkdir -p $(BIN_DIR)
-#	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@
+$(BIN_DIR)/%: $(LOOKUP_DIR)/%.cpp $(LOOKUP_COMMON_SRC)
+	@mkdir -p $(BIN_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@
 
 # reachability
 # $(BIN_DIR)/%: $(REACHABILITY_DIR)/%.cpp $(REACHABILITY_COMMON_SRC)

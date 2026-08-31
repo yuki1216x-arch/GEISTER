@@ -226,7 +226,7 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
 	  
 	  // after checking all legal moves
 	  if(iter % 2 == 1) {
-	    if(win_plan_num >= nchild) {  // win
+	    if(win_plan_num >= 1) {  // win
 	      parent_table.set(id, v_win);
 	      nwin++;
 	      count_changes++;
@@ -240,7 +240,7 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
 	      parent_table.set(id, v_win);
 	      nwin++;
 	      count_changes++;
-	    } else if(lose_plan_num >= nchild) { // lose
+	    } else if(lose_plan_num >= 1) { // lose
 	      parent_table.set(id, v_lose);
 	      nlose++;
 	      count_changes++;

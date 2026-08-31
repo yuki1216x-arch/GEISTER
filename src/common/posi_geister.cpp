@@ -228,7 +228,7 @@ int Posi::getunknowninfo(unsigned char zdd_code[70][36]) const noexcept {
 	for(int i = 0; i < 36; i++) {
 	  if((m_array[i].piece & PLAYER_MASK) == enemy) {
 	    assert(m_array[i].piece == (unknown|enemy));
-	    if(indexes[enemy_blue_count] == unknown_count) {
+	    if(enemy_blue_count < m_enemy_blue_count && indexes[enemy_blue_count] == unknown_count) {
 	      zdd_code[nblief][i] = 4; // (blue|enemy)
 	      enemy_blue_count++;
 	      assert(enemy_blue_count <= m_enemy_blue_count);
