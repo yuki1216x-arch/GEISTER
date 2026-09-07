@@ -1,0 +1,813 @@
+root->num = 7539840
+root->lengthmax = 44
+root->lengthmin = 36
+root->lengthave = 42.8438
+sumad =1392
+root->num = 11309760
+root->lengthmax = 45
+root->lengthmin = 36
+root->lengthave = 43.5104
+sumad =1614
+root->num = 706860
+root->lengthmax = 43
+root->lengthmin = 36
+root->lengthave = 41.7121
+sumad =1044
+root->num = 235620
+root->lengthmax = 41
+root->lengthmin = 36
+root->lengthave = 40.6288
+sumad =586
+root->num = 235620
+root->lengthmax = 41
+root->lengthmin = 36
+root->lengthave = 40.6288
+sumad =586
+root->num = 706860
+root->lengthmax = 44
+root->lengthmin = 36
+root->lengthave = 42.0455
+sumad =1044
+root->num = 706860
+root->lengthmax = 43
+root->lengthmin = 36
+root->lengthave = 41.7121
+sumad =1044
+root->num = 353430
+root->lengthmax = 42
+root->lengthmin = 36
+root->lengthave = 41.2121
+sumad =684
+read_file_name: data/db/self_table_1-1-2-1.bin
+no file: 
+read_file_name: data/db/enemy_table_1-1-2-1.bin
+no file: 
+read_file_name: data/db/self_table_2-1-1-1.bin
+no file: 
+read_file_name: data/db/enemy_table_2-1-1-1.bin
+no file: 
+read_file_name: data/db/self_table_0-1-2-1.bin
+no file: 
+read_file_name: data/db/self_table_1-0-2-1.bin
+no file: 
+read_file_name: data/db/enemy_table_1-1-1-1.bin
+aaaa
+header[0]: 0
+header[1]: 32
+header[2]: 44
+header[3]: 201
+header[4]: 10
+header[5]: 0
+header[6]: 0
+header[7]: 0
+bbbb
+before nwin = 98484
+before nlose = 54882
+before ncanlose = 553236
+before nunknown = 258
+last unknown = 696530
+read_file_name: data/db/enemy_table_1-1-2-0.bin
+no file: 
+read_file_name: data/db/self_table_1-1-1-1.bin
+aaaa
+header[0]: 0
+header[1]: 31
+header[2]: 44
+header[3]: 201
+header[4]: 10
+header[5]: 0
+header[6]: 0
+header[7]: 0
+bbbb
+before nwin = 191992
+before nlose = 14818
+before ncanlose = 499396
+before nunknown = 654
+last unknown = 696531
+read_file_name: data/db/self_table_2-0-1-1.bin
+no file: 
+read_file_name: data/db/enemy_table_2-1-0-1.bin
+no file: 
+read_file_name: data/db/enemy_table_2-1-1-0.bin
+no file: 
+iter > 1: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 418880
+nlose = 0
+ncan_lose = 12
+nunknown = 7120948
+
+iter > 1: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 1238688
+nlose = 0
+ncan_lose = 0
+nunknown = 10071072
+
+iter > 2: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 287680
+nlose = 35904
+ncan_lose = 2893572
+nunknown = 4322684
+
+iter > 2: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 995666
+nlose = 17952
+ncan_lose = 3684824
+nunknown = 6611318
+
+iter > 3: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 976260
+nlose = 26888
+ncan_lose = 1186890
+nunknown = 5349802
+
+iter > 3: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2972806
+nlose = 10584
+ncan_lose = 1262124
+nunknown = 7064246
+
+iter > 4: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 544368
+nlose = 285492
+ncan_lose = 4028862
+nunknown = 2681118
+
+iter > 4: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2080382
+nlose = 132954
+ncan_lose = 5026050
+nunknown = 4070374
+
+iter > 5: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1362948
+nlose = 154784
+ncan_lose = 2719480
+nunknown = 3302628
+
+iter > 5: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 4334292
+nlose = 48480
+ncan_lose = 2761504
+nunknown = 4165484
+
+iter > 6: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 640032
+nlose = 843668
+ncan_lose = 4687940
+nunknown = 1368200
+
+iter > 6: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2659844
+nlose = 353976
+ncan_lose = 6098474
+nunknown = 2197466
+
+iter > 7: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1488234
+nlose = 335768
+ncan_lose = 3971842
+nunknown = 1743996
+
+iter > 7: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 4908614
+nlose = 84732
+ncan_lose = 3918086
+nunknown = 2398328
+
+iter > 8: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 661106
+nlose = 1207764
+ncan_lose = 4977228
+nunknown = 693742
+
+iter > 8: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2846052
+nlose = 460344
+ncan_lose = 6670590
+nunknown = 1332774
+
+iter > 9: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1515470
+nlose = 416312
+ncan_lose = 4690956
+nunknown = 917102
+
+iter > 9: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5084102
+nlose = 93426
+ncan_lose = 4591040
+nunknown = 1541192
+
+iter > 10: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 666262
+nlose = 1338208
+ncan_lose = 5200112
+nunknown = 335258
+
+iter > 10: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2880522
+nlose = 483768
+ncan_lose = 7058080
+nunknown = 887390
+
+iter > 11: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1522630
+nlose = 426664
+ncan_lose = 5116258
+nunknown = 474288
+
+iter > 11: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5119158
+nlose = 94836
+ncan_lose = 4999990
+nunknown = 1095776
+
+iter > 12: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 668004
+nlose = 1352124
+ncan_lose = 5369276
+nunknown = 150436
+
+iter > 12: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2893704
+nlose = 486390
+ncan_lose = 7325734
+nunknown = 603932
+
+iter > 13: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1524908
+nlose = 427300
+ncan_lose = 5351874
+nunknown = 235758
+
+iter > 13: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5131930
+nlose = 94836
+ncan_lose = 5262570
+nunknown = 820424
+
+iter > 14: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 668316
+nlose = 1353212
+ncan_lose = 5448716
+nunknown = 69596
+
+iter > 14: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2897702
+nlose = 486462
+ncan_lose = 7481576
+nunknown = 444020
+
+iter > 15: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1525418
+nlose = 427300
+ncan_lose = 5470624
+nunknown = 116498
+
+iter > 15: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5136822
+nlose = 94836
+ncan_lose = 5432822
+nunknown = 645280
+
+iter > 16: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 668344
+nlose = 1353212
+ncan_lose = 5486972
+nunknown = 31312
+
+iter > 16: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2898842
+nlose = 486462
+ncan_lose = 7585982
+nunknown = 338474
+
+iter > 17: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1525454
+nlose = 427300
+ncan_lose = 5533914
+nunknown = 53172
+
+iter > 17: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5137856
+nlose = 94836
+ncan_lose = 5560952
+nunknown = 516116
+
+iter > 18: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 668346
+nlose = 1353212
+ncan_lose = 5505264
+nunknown = 13018
+
+iter > 18: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2899032
+nlose = 486462
+ncan_lose = 7655198
+nunknown = 269068
+
+iter > 19: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1525456
+nlose = 427300
+ncan_lose = 5565532
+nunknown = 21552
+
+iter > 19: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5138076
+nlose = 94836
+ncan_lose = 5651380
+nunknown = 425468
+
+iter > 20: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 668346
+nlose = 1353212
+ncan_lose = 5513586
+nunknown = 4696
+
+iter > 20: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2899088
+nlose = 486462
+ncan_lose = 7694032
+nunknown = 230178
+
+iter > 21: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1525456
+nlose = 427300
+ncan_lose = 5579342
+nunknown = 7742
+
+iter > 21: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5138138
+nlose = 94836
+ncan_lose = 5706992
+nunknown = 369794
+
+iter > 22: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 668346
+nlose = 1353212
+ncan_lose = 5517014
+nunknown = 1268
+
+iter > 22: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2899088
+nlose = 486462
+ncan_lose = 7720326
+nunknown = 203884
+
+iter > 23: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1525456
+nlose = 427300
+ncan_lose = 5584422
+nunknown = 2662
+
+iter > 23: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5138138
+nlose = 94836
+ncan_lose = 5744040
+nunknown = 332746
+
+iter > 24: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 668346
+nlose = 1353212
+ncan_lose = 5517698
+nunknown = 584
+
+iter > 24: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2899088
+nlose = 486462
+ncan_lose = 7736286
+nunknown = 187924
+
+iter > 25: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1525456
+nlose = 427300
+ncan_lose = 5585394
+nunknown = 1690
+
+iter > 25: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5138138
+nlose = 94836
+ncan_lose = 5764344
+nunknown = 312442
+
+iter > 26: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 668346
+nlose = 1353212
+ncan_lose = 5517714
+nunknown = 568
+
+iter > 26: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2899088
+nlose = 486462
+ncan_lose = 7744608
+nunknown = 179602
+
+iter > 27: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1525456
+nlose = 427300
+ncan_lose = 5585414
+nunknown = 1670
+
+iter > 27: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5138138
+nlose = 94836
+ncan_lose = 5774718
+nunknown = 302068
+
+iter > 28: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 668346
+nlose = 1353212
+ncan_lose = 5517714
+nunknown = 568
+
+iter > 28: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2899088
+nlose = 486462
+ncan_lose = 7748592
+nunknown = 175618
+
+iter > 29: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1525456
+nlose = 427300
+ncan_lose = 5585414
+nunknown = 1670
+
+iter > 29: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5138138
+nlose = 94836
+ncan_lose = 5778996
+nunknown = 297790
+
+iter > 30: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 668346
+nlose = 1353212
+ncan_lose = 5517714
+nunknown = 568
+
+iter > 30: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2899088
+nlose = 486462
+ncan_lose = 7749258
+nunknown = 174952
+
+iter > 31: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1525456
+nlose = 427300
+ncan_lose = 5585414
+nunknown = 1670
+
+iter > 31: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5138138
+nlose = 94836
+ncan_lose = 5779958
+nunknown = 296828
+
+iter > 32: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 668346
+nlose = 1353212
+ncan_lose = 5517714
+nunknown = 568
+
+iter > 32: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2899088
+nlose = 486462
+ncan_lose = 7749636
+nunknown = 174574
+
+iter > 33: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1525456
+nlose = 427300
+ncan_lose = 5585414
+nunknown = 1670
+
+iter > 33: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5138138
+nlose = 94836
+ncan_lose = 5780582
+nunknown = 296204
+
+iter > 34: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 668346
+nlose = 1353212
+ncan_lose = 5517714
+nunknown = 568
+
+iter > 34: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2899088
+nlose = 486462
+ncan_lose = 7749966
+nunknown = 174244
+
+iter > 35: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1525456
+nlose = 427300
+ncan_lose = 5585414
+nunknown = 1670
+
+iter > 35: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5138138
+nlose = 94836
+ncan_lose = 5781100
+nunknown = 295686
+
+iter > 36: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 668346
+nlose = 1353212
+ncan_lose = 5517714
+nunknown = 568
+
+iter > 36: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2899088
+nlose = 486462
+ncan_lose = 7750124
+nunknown = 174086
+
+iter > 37: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1525456
+nlose = 427300
+ncan_lose = 5585414
+nunknown = 1670
+
+iter > 37: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5138138
+nlose = 94836
+ncan_lose = 5781326
+nunknown = 295460
+
+iter > 38: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 668346
+nlose = 1353212
+ncan_lose = 5517714
+nunknown = 568
+
+iter > 38: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2899088
+nlose = 486462
+ncan_lose = 7750204
+nunknown = 174006
+
+iter > 39: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 1525456
+nlose = 427300
+ncan_lose = 5585414
+nunknown = 1670
+
+iter > 39: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 5138138
+nlose = 94836
+ncan_lose = 5781436
+nunknown = 295350
+
+iter > 40: (1, 1, 2, 1)
+boss
+before_outtable
+write
+nwin  = 668346
+nlose = 1353212
+ncan_lose = 5517714
+nunknown = 568
+
+iter > 40: (2, 1, 1, 1)
+boss
+before_outtable
+write
+nwin  = 2899088
+nlose = 486462
+ncan_lose = 7750204
+nunknown = 174006
+
+analysis finished

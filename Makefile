@@ -106,6 +106,44 @@ clean:
 	rm -rf $(BIN_DIR)/*
 
 # =========================
+# clean
+# =========================
+
+test: $(BIN_DIR)/main
+	@echo "=== Building test databases ==="
+	@mkdir -p data/db data/output
+
+	@./bin/main 1 1 1 1 1 s > data/output/test1-1-1-1.txt 2>&1
+	@./bin/main 1 1 1 1 2 s > data/output/test1-1-1-2.txt 2>&1
+	@./bin/main 1 1 1 2 1 s > data/output/test1-1-2-1.txt 2>&1
+
+	@echo "=== Comparing databases ==="
+	@failed=0; \
+	for file in \
+		self_table_1-1-1-1.bin \
+		enemy_table_1-1-1-1.bin \
+		self_table_1-1-1-2.bin \
+		enemy_table_1-1-1-2.bin \
+		self_table_1-1-2-1.bin \
+		enemy_table_1-1-2-1.bin \
+		self_table_1-2-1-1.bin \
+		enemy_table_1-2-1-1.bin \
+		self_table_2-1-1-1.bin \
+		enemy_table_2-1-1-1.bin; \
+	do \
+		if ! diff -q data/$$file data/db/$$file > /dev/null; then \
+			echo "DIFF: $$file"; \
+			failed=1; \
+		fi; \
+	done; \
+	if [ $$failed -ne 0 ]; then \
+		echo "buildに失敗した"; \
+		exit 1; \
+	else \
+		echo "buildに成功した"; \
+	fi
+
+# =========================
 # phony
 # =========================
 
