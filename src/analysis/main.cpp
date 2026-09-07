@@ -592,6 +592,9 @@ int main(int argc, char *argv[]) {
   //argv[2~5] : (i, j, k, l)
   int iteration = atoi(argv[1]);
   int num_b = atoi(argv[2]), num_r = atoi(argv[3]), num_eb = atoi(argv[4]), num_er = atoi(argv[5]);
+  bool is_opponent = false;
+  if(string(argv[6]) == "e") is_opponent = true;
+  else assert(string(argv[6]) == "s");
 
   string filename_self = "data/db/" + base[0] + '_' + to_string(num_b) + '-' + to_string(num_r) + '-' + to_string(num_eb) + '-' + to_string(num_er) + ".bin";
   string filename_enemy = "data/db/" + base[1] + '_' + to_string(num_b) + '-' + to_string(num_r) + '-' + to_string(num_eb) + '-' + to_string(num_er) + ".bin";
@@ -623,11 +626,34 @@ int main(int argc, char *argv[]) {
   unique_ptr<ZDD> zdd_enemy_opp_cap = make_unique<ZDD>(num_eb, num_er, num_b + num_r - 1);
   unique_ptr<ZDD> zdd_self_opp_cap_b = make_unique<ZDD>(num_eb - 1, num_er, num_b + num_r);
   unique_ptr<ZDD> zdd_self_opp_cap_r = make_unique<ZDD>(num_eb, num_er - 1, num_b + num_r);
+
+  int self_iteration, enemy_iteration, self_iteration_opp, enemy_iteration_opp;
+  if(iteration % 2 == 1) {
+    if(string(argv[6]) == "s") {
+      self_iteration = iteration - 2;
+    } else {
+      assert(string(argv[6]) == "e");
+      self_iteration = iteration;
+    }
+    enemy_iteration = iteration - 1;
+    self_iteration_opp = iteration - 2;
+    enemy_iteration_opp = iteration - 1;
+  } else {
+    if(string(argv[6]) == "s") {
+      enemy_iteration = iteration - 2;
+    } else {
+      assert(string(argv[6]) == "e");
+      enemy_iteration = iteration;
+    }
+    self_iteration = iteration - 1;
+    self_iteration_opp = iteration - 1;
+    enemy_iteration_opp = iteration - 2;
+  }
   
-  Table table_self(iteration - 2, filename_self.c_str(), 2, placement);
-  Table table_enemy(iteration - 1, filename_enemy.c_str(), 2, placement);
-  Table table_self_opp(iteration - 2, filename_self_opp.c_str(), 2, placement_opp);
-  Table table_enemy_opp(iteration - 1, filename_enemy_opp.c_str(), 2, placement_opp);
+  Table table_self(self_iteration, filename_self.c_str(), 2, placement);
+  Table table_enemy(enemy_iteration, filename_enemy.c_str(), 2, placement);
+  Table table_self_opp(self_iteration_opp, filename_self_opp.c_str(), 2, placement_opp);
+  Table table_enemy_opp(enemy_iteration_opp, filename_enemy_opp.c_str(), 2, placement_opp);
   Table table_self_cap_b(0, filename_self_cap_b.c_str(), 2, placement_self_cap_b);
   Table table_self_cap_r(0, filename_self_cap_r.c_str(), 2, placement_self_cap_r);
   Table table_enemy_cap_b(0, filename_enemy_cap_b.c_str(), 2, placement_enemy_cap);
@@ -638,8 +664,6 @@ int main(int argc, char *argv[]) {
   Table table_enemy_opp_cap_r(0, filename_enemy_opp_cap_r.c_str(), 2, placement_enemy_opp_cap);
     
   while(true) {
-    iteration++;
-
     if(num_b == num_eb && num_r == num_er) {
       std::cout << "iter > " << iteration << ": (" << num_b << ", " << num_r << ", " << num_eb << ", " << num_er << ")" << endl;
       
@@ -698,48 +722,51 @@ int main(int argc, char *argv[]) {
       }
     } else {
       assert(num_b != num_eb || num_r != num_er);
-      // First, process (num_b, num_r, num_eb, num_er)
-      std::cout << "iter > " << iteration << ": (" << num_b << ", " << num_r << ", " << num_eb << ", " << num_er << ")" << endl;
-      
-      // flag indicating whether the worker has finished its work
-      // always set to false before creating the boss
-      flag_worker_quit = false;
-      
-      if(iteration % 2 == 1) {
-	thread th_boss(boss, iteration, num_b, num_r, num_eb, num_er,
-		       ref(table_self), filename_self.c_str(),
-		       cref(table_enemy), cref(table_enemy_cap_b), cref(table_enemy_cap_r),
-		       cref(table_enemy_opp));  //boss側作る
+
+      if(!is_opponent) {
+	// First, process (num_b, num_r, num_eb, num_er)
+	std::cout << "iter > " << iteration << ": (" << num_b << ", " << num_r << ", " << num_eb << ", " << num_er << ")" << endl;
 	
-	thread th_worker[nworker];  //worker側を作る
-	for(int workerid = 0; workerid < nworker; workerid++){
-	  th_worker[workerid] = thread(worker, iteration, num_b, num_r, num_eb, num_er,
-				       cref(*zdd), cref(*zdd_enemy_cap), cref(*zdd_enemy_cap),
-				       cref(*zdd_opp));   //ここでworker()を呼び出す
-	}
+	// flag indicating whether the worker has finished its work
+	// always set to false before creating the boss
+	flag_worker_quit = false;
 	
-	//終了処理
-	th_boss.join(); 
-	for(int workerid = 0; workerid < nworker; workerid++){
-	  th_worker[workerid].join();
-	}
-      } else {
-	thread th_boss(boss, iteration, num_b, num_r, num_eb, num_er,
-		       ref(table_enemy), filename_enemy.c_str(),
-		       cref(table_self), cref(table_self_cap_b), cref(table_self_cap_r),
-		       cref(table_self_opp));
+	if(iteration % 2 == 1) {
+	  thread th_boss(boss, iteration, num_b, num_r, num_eb, num_er,
+			 ref(table_self), filename_self.c_str(),
+			 cref(table_enemy), cref(table_enemy_cap_b), cref(table_enemy_cap_r),
+			 cref(table_enemy_opp));  //boss側作る
+	  
+	  thread th_worker[nworker];  //worker側を作る
+	  for(int workerid = 0; workerid < nworker; workerid++){
+	    th_worker[workerid] = thread(worker, iteration, num_b, num_r, num_eb, num_er,
+					 cref(*zdd), cref(*zdd_enemy_cap), cref(*zdd_enemy_cap),
+					 cref(*zdd_opp));   //ここでworker()を呼び出す
+	  }
+	  
+	  //終了処理
+	  th_boss.join(); 
+	  for(int workerid = 0; workerid < nworker; workerid++){
+	    th_worker[workerid].join();
+	  }
+	} else {
+	  thread th_boss(boss, iteration, num_b, num_r, num_eb, num_er,
+			 ref(table_enemy), filename_enemy.c_str(),
+			 cref(table_self), cref(table_self_cap_b), cref(table_self_cap_r),
+			 cref(table_self_opp));
+	  
+	  thread th_worker[nworker];
+	  for(int workerid = 0; workerid < nworker; workerid++) {
+	    th_worker[workerid] = thread(worker, iteration, num_b, num_r, num_eb, num_er,
+					 cref(*zdd), cref(*zdd_self_cap_b), cref(*zdd_self_cap_r),
+					 cref(*zdd_opp));
+	  }
 	
-	thread th_worker[nworker];
-	for(int workerid = 0; workerid < nworker; workerid++) {
-	  th_worker[workerid] = thread(worker, iteration, num_b, num_r, num_eb, num_er,
-				       cref(*zdd), cref(*zdd_self_cap_b), cref(*zdd_self_cap_r),
-				       cref(*zdd_opp));
-	}
-	
-	//終了処理
-	th_boss.join(); 
-	for(int workerid = 0; workerid < nworker; workerid++){
-	  th_worker[workerid].join();
+	  //終了処理
+	  th_boss.join(); 
+	  for(int workerid = 0; workerid < nworker; workerid++){
+	    th_worker[workerid].join();
+	  }
 	}
       }
 
@@ -800,7 +827,10 @@ int main(int argc, char *argv[]) {
 	cout << "analysis finished" << endl;
 	break;
       }
+
+      is_opponent = false;
     }
+    iteration++;
   }
 
   return 0;

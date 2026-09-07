@@ -192,6 +192,7 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
 	  assert(nchild > 0);   //子供がいないとおかしい
 	  int win_plan_num = 0;  // number of forced-win strategies
 	  int lose_plan_num = 0;  // number of exist-loss strategies
+	  bool already_decided = false;
 	  for(int j = 0; j < nchild; j++) {
 	    long long int num_of_haiti = array_id[j];
 	    if(num_of_haiti >= 0) {   // not terminal; retrieve the value from the database
@@ -222,28 +223,40 @@ static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
 		// Do not count this move because it is illegal
 	      }
 	    }
+
+	    if(iter % 2 == 1) {
+	      if(win_plan_num >= 1) {
+		parent_table.set(id, v_win);
+		nwin++;
+		count_changes++;
+		already_decided = true;
+		break;
+	      }
+	    } else {
+	      if(lose_plan_num >= 1) {
+		parent_table.set(id, v_lose);
+		nlose++;
+		count_changes++;
+		already_decided = true;
+		break;
+	      }
+	    }
 	  }
 	  
 	  // after checking all legal moves
-	  if(iter % 2 == 1) {
-	    if(win_plan_num >= 1) {  // win
-	      parent_table.set(id, v_win);
-	      nwin++;
-	      count_changes++;
-	    } else if(lose_plan_num == nchild) {  // lose
-	      parent_table.set(id, v_lose);
-	      nlose++;
-	      count_changes++;
-	    }
-	  } else {
-	    if(win_plan_num == nchild) { // win
-	      parent_table.set(id, v_win);
-	      nwin++;
-	      count_changes++;
-	    } else if(lose_plan_num >= 1) { // lose
-	      parent_table.set(id, v_lose);
-	      nlose++;
-	      count_changes++;
+	  if(!already_decided) {
+	    if(iter % 2 == 1) {
+	      if(lose_plan_num == nchild) {  // lose
+		parent_table.set(id, v_lose);
+		nlose++;
+		count_changes++;
+	      }
+	    } else {
+	      if(win_plan_num == nchild) { // win
+		parent_table.set(id, v_win);
+		nwin++;
+		count_changes++;
+	      }
 	    }
 	  }
 	}
@@ -357,9 +370,19 @@ int main(int argc, char *argv[]) {
   unique_ptr<ZDD> zdd_enemy_cap = make_unique<ZDD>(num_b, num_r, num_eb + num_er - 1);
   unique_ptr<ZDD> zdd_self_cap_b = make_unique<ZDD>(num_b - 1, num_r, num_eb + num_er);
   unique_ptr<ZDD> zdd_self_cap_r = make_unique<ZDD>(num_b, num_r - 1, num_eb + num_er);
+
+  int self_iteration, enemy_iteration;
+  if(iteration % 2 == 1) {
+    self_iteration = iteration - 2;
+    enemy_iteration = iteration - 1;
+  } else {
+    assert(iteration % 2 == 0);
+    self_iteration = iteration - 1;
+    enemy_iteration = iteration - 2;
+  }
   
-  Table table_self(iteration - 2, filename_self.c_str(), 2, placement);
-  Table table_enemy(iteration - 1, filename_enemy.c_str(), 2, placement);
+  Table table_self(self_iteration, filename_self.c_str(), 2, placement);
+  Table table_enemy(enemy_iteration, filename_enemy.c_str(), 2, placement);
   Table table_self_cap_b(0, filename_self_cap_b.c_str(), 2, placement_self_cap_b);
   Table table_self_cap_r(0, filename_self_cap_r.c_str(), 2, placement_self_cap_r);
   Table table_enemy_cap_b(0, filename_enemy_cap_b.c_str(), 2, placement_enemy_cap);

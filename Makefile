@@ -3,7 +3,7 @@
 # =========================
 
 CXX       := g++
-CXXFLAGS  := -std=c++14 -O2 -Wall -pthread #-DNDEBUG
+CXXFLAGS  := -std=c++14 -O2 -Wall -pthread -DNDEBUG
 INCLUDES  := -Isrc/common
 
 # sanitizer/debug
