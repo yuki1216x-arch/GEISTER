@@ -1,6 +1,6 @@
 #include "table.hpp"
 
-// 表を読み込むクラス
+// Class for reading tables
 class InTable {
 private:
     unsigned char m_buffer;
@@ -16,7 +16,7 @@ public:
       cerr << "Read Error" << endl;
       terminate();
     }
-    m_ofs.close();  //ファイルを閉じる
+    m_ofs.close();  // close the file
   }
   
   unsigned int read(size_t bits_per_entry) noexcept {
@@ -30,9 +30,9 @@ public:
     }
 
     unsigned int mask = (1U << bits_per_entry) - 1U;
-    unsigned int val = static_cast<unsigned int>(m_buffer) & mask;   //今のbuffer(アドレス)の11(3U)と＆を取って、値を読み取る(val)
+    unsigned int val = static_cast<unsigned int>(m_buffer) & mask;   // read the value (val) by masking the required bits from the current buffer address
     
-    m_buffer >>=  bits_per_entry; //2bit分アドレスを進める
+    m_buffer >>=  bits_per_entry; // advance the address by the number of bits read
     m_num_keep--;
     
     return val;
@@ -41,25 +41,25 @@ public:
 
 InTable::InTable(int iter, const string &s, size_t num) noexcept : m_buffer(0), m_num_keep(0), m_ofs(s, fstream::in | fstream::binary) {
   assert(s.size() > 0 && s.size() < 255);
-  unsigned char header[8];    //header[0]: 0で固定, header[1]: iterの回数, 以降: 配置数
+  unsigned char header[8];   // header[0]: always 0, header[1]: number of iterations, remaining entries: number of configurations
   size_t num_check = 0ULL;
-  for(int i = 0; i < 8; i++) m_ofs.read((char*)header+i, 1U); //各表(2bit)の前のヘッダーを読み込む(ヘッダーは個人的なやつ)
+  for(int i = 0; i < 8; i++) m_ofs.read((char*)header+i, 1U); // read the header of each table
 
   for(int i = 0; i < 8; i++) {
     cout << "header[" << i << "]: " << (int)header[i] << endl;
   }
   
-  // headerに記憶されている配置数を取得(256進数)
+  // retrieve the number of configurations stored in the header(base-256 number)
   for(int i = 5; i >= 0; i--) {
     num_check *= 256ULL;    
     num_check += header[i+2];
   }
-  // header[0],[1]の値を正誤判定
+  // validate the values of header[0], and header[1]
   if(header[0] != 0 || (header[1] != iter && iter != 0)) {
     cerr << "Header Error" << endl;
     terminate();
   }
-  //配置数の確認(header[2-7])
+  // verify the number of configurations in the header[2-7]
   if(num_check != num) {
     cerr << "Size Error " << endl;
     terminate();
@@ -76,9 +76,9 @@ Table::Table(int iter, const char* read_file_name, size_t bits_per_entry, unsign
   m_table = new uint64_t [m_table_size];
   
   fstream read_file (read_file_name, fstream::in | fstream::binary);
-  if(!read_file) {    //readファイルがなかった場合
+  if(!read_file) {    // if the input file does not exist
     cout << "no file: " << endl;
-    for(size_t tableid = 0; tableid < m_table_size; tableid++) m_table[tableid] = 0ULL; //全ての表を0にする
+    for(size_t tableid = 0; tableid < m_table_size; tableid++) m_table[tableid] = 0ULL; // initialize all tables to zero
   } else {
     {
       unsigned long long int nwin = 0, nlose = 0, nunknown = 0, lunknown = 0, ncanlose = 0;
@@ -90,7 +90,7 @@ Table::Table(int iter, const char* read_file_name, size_t bits_per_entry, unsign
 	for(unsigned long long int i = 0; i < placement_size; i++) set(i, in_table.read(m_bits_per_entry));
       } else {
 	for(unsigned long long int i = 0; i < placement_size; i++) {
-	  unsigned int value = in_table.read(m_bits_per_entry);   //in_tableからidを一つずつ読み込んでいき、その値をvに代入
+	  unsigned int value = in_table.read(m_bits_per_entry);   // read each ID from in_table and assign its value to v
 	  
 	  if(value == v_win) {
 	    nwin++;

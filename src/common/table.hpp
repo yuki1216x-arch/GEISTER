@@ -28,7 +28,7 @@ public:
   Table(int iter, const char* read_file_name, size_t bits_per_entry, unsigned long long int placement_size) noexcept;
   ~Table() noexcept { delete [] m_table; }
 
-  //引数で与えたid番のw,l,unkを得る
+  // retrieve the label for the specified ID
   unsigned int get(unsigned long long int id) const noexcept {
     unsigned long long int id64 = id / m_entries_per_word;
     unsigned long long int id1 = (id % m_entries_per_word) * m_bits_per_entry;
@@ -41,7 +41,7 @@ public:
     return v;
   }
   
-  //表のid番のところにu2(w,l,unk)をセットする関数
+  // function for setting an entry at the specified ID in the table
   void set(unsigned long long int id, unsigned int entry) noexcept {
     unsigned long long int id64 = id / m_entries_per_word;
     unsigned long long int id1 = (id % m_entries_per_word) * m_bits_per_entry;
@@ -52,7 +52,7 @@ public:
   }
 };
 
-//1繰り返しの最後に表(2bit)を全部書き出すクラス
+// Class for writing all tables at the end of each iteration
 class OutTable {
 private:
   unsigned char m_buffer;
@@ -88,7 +88,7 @@ public:
     }
     m_ofs.close();
   }
-  //表の各番地に書き込んでいく(bitesがw,l,unk)
+  // write labels to each entry in the table
   void write(unsigned int entry) noexcept {
     if(entry == v_win) m_nwin++;
     else if(entry == v_lose) m_nlose++;

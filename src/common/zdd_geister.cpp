@@ -9,11 +9,6 @@
 #include "node.hpp"
 #include "zdd_geister.hpp"
 
-//#define MAX_NB 4         // 青駒の最大数
-//#define MAX_NR 4         // 赤駒の最大数
-//#define MAX_NE 8         // 敵駒の最大数
-//#define MAX_POINT 36     // ポイント(マス)の数
-
 using std::move;
 
 struct LocInfo {
@@ -38,39 +33,36 @@ constexpr LocInfo tbl_objid2locinfo[6] = {
 
 // cunstruct a zdd
 void ZDD::construct_zdd(int board_nb, int board_nr, int board_ne) noexcept {
-  unique_ptr<Node> root = make_unique<Node>();                 //根節点
+  unique_ptr<Node> root = make_unique<Node>();   // root node
   int d = -1;
   Node* n;
 
-  m_N[0].push_back(move(root));   //N[0]に根節点を入れる
+  m_N[0].push_back(move(root));   // add the root node to N[0]
   for(int i = 0; i < 36; i++) {
     for(int j = 0; j < 4; j++) {
       d++;
       for(size_t k = 0; k < m_N[d].size(); k++) {
 	n = m_N[d][k].get();
 
-	//0,1-枝へ進む
+	// follow the 0-branch or 1-branch
 	for(int x = 0; x < 2; x++) {
-	  //0-葉へ到達するか
-	  if(n->IsNextLeaf0(d, x, board_nb, board_nr, board_ne)) {  //x-枝の先が0-枝のとき
+	  // check whether the 0-leaf is reached
+	  if(n->IsNextLeaf0(d, x, board_nb, board_nr, board_ne)) {  // if the x-branch leads to the 0-leaf
 	    if(x == 0) n->m_left = l0.get();
 	    else n->m_right = l0.get();
-	    // continue;
-	  } else if(d == 143) {   //深さ最大のとき
+	  } else if(d == 143) {   // if the maximum depth is reached
 	    if(x == 0) n->m_left = l1.get();
 	    else n->m_right = l1.get();
-	    // continue;
-	  } else {   //枝の先が0-枝でも、深さ最大でもないとき
-	    unique_ptr<Node> c = make_unique<Node>(*n, x);   //節点を生成
+	  } else {   // if the branch does not lead to the 0-leaf and the maximum depth has not been reached
+	    unique_ptr<Node> c = make_unique<Node>(*n, x);   // create a node
 	    
-	    //深さd+1に節点がないなら新しく登録
+	    // if the node does not exist at depth d + 1, register it as a new node
 	    if(m_N[d+1].size() == 0) {     
-	      if(x == 0) n->m_left = c.get(); //親と子をつなぐ
+	      if(x == 0) n->m_left = c.get(); // connect the parent and child nodes
 	      else n->m_right = c.get();
-	      m_N[d+1].push_back(move(c));    //次の深さの節点集合に追加
-	      // continue;
+	      m_N[d+1].push_back(move(c));    // add the node to the set of nodes at the next depth
 	    } else {
-	      //等価節点の共有
+	      // share equivalent nodes
 	      for(size_t l = 0; l < m_N[d+1].size(); l++) {
 		if(m_N[d+1][l]->ExistEquivalentNode(*c)) {
 		  if(x == 0) n->m_left = m_N[d+1][l].get();
@@ -83,29 +75,6 @@ void ZDD::construct_zdd(int board_nb, int board_nr, int board_ne) noexcept {
 		  break;
 		}
 	      }
-
-	      /*
-	      bool flag = false;  //共有するかどうかのflag(trueなら共有する)
-	      unsigned int key = 4096*c-> 2048*c->get_f() + 64*c->get_ne() + 8*c->get_nb() + c->get_nr();    //keyを求める
-                    
-	      auto it = for_share_node.find(key);      //同じkeyを探す
-	      if(it != for_share_node.end()) flag = true; //itが末尾でないなら、同じkeyがあった->共有する
-	      
-	      //flagがfalseなら共有しない
-	      if(!flag) {
-		if(m_N[d+1].size() > UINT_MAX) {
-		  cerr << "too large size!" << endl;
-		  terminate();
-		}
-		for_share_node.insert(make_pair(key, m_N[d+1].size()));    //新しい要素を挿入
-		if(x == 0) n->m_left = c.get();
-		else n->m_right = c.get();
-		m_N[d+1].push_back(move(c));
-	      } else { //flagがtrueの場合、共有する
-		if(x == 0) n->m_left = m_N[d+1][it->second];
-		else n->m_right = m_N[d+1][it->second];
-	      }
-	      */
             }   
 	  }
 	}
@@ -114,7 +83,7 @@ void ZDD::construct_zdd(int board_nb, int board_nr, int board_ne) noexcept {
   }
   
   int end = 1;
-  //冗長節点の削除
+  // remove redundant nodes
   while(end == 1){
     end = 0;
     for(int i = 0; i < 143; i++){
@@ -156,7 +125,6 @@ void ZDD::construct_zdd(int board_nb, int board_nr, int board_ne) noexcept {
 
   for(int i = 0; i < 144; i++){
     sum += m_N[i].size();
-    // cout << "N[" << i << "]: " << m_N[i].size() << endl;
   }
-  cout << "sumad =" << sum << endl;   //節点数
+  cout << "sumad =" << sum << endl;   // number of nodes
 }

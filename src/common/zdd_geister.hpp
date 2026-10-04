@@ -23,7 +23,7 @@ using std::make_unique;
 using std::vector;
 using std::size_t;
 
-//ZDDのクラス
+// ZDD class
 class ZDD {
 private:
   unique_ptr<Node> l0;
