@@ -1,3 +1,4 @@
+// Sample 100 Geister configuration IDs and print each position and its label.
 #include <memory>
 #include <chrono>
 #include <random>
@@ -15,21 +16,6 @@ using std::mt19937_64;
 using std::uniform_int_distribution;
 using std::chrono::high_resolution_clock;
 using std::to_string;
-
-std::vector<string> split(const string text, const char delimiter='/') {
-  std::vector<string> columns;
-
-  if (text.empty()) {
-    return columns;
-  }
-
-  std::stringstream stream{text};
-  string buff;
-  while (getline(stream, buff, delimiter)) {
-    columns.push_back(buff);
-  }
-  return columns;
-}
 
 constexpr unsigned long long int placement_count[5][5][9] {
   { {0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL, 0ULL}
@@ -59,60 +45,75 @@ constexpr unsigned long long int placement_count[5][5][9] {
     , {0ULL, 0ULL, 800688596400ULL, 6939301168800ULL, 43370632305000ULL, 208179035064000ULL, 798019634412000ULL, 2508061708152000ULL, 6583661983899000ULL} }
 };
 
-const string base[2] = {"self_table", "enemy_table"};
+const string table_filename_prefixes[2] = {"self_table", "enemy_table"};
 
-//---.exe iter read_file write_file
 int main(int argc, char *argv[]) {
-  int player_to_move = atoi(argv[1]); // player to move
-  int num_b = atoi(argv[2]), num_r = atoi(argv[3]), num_eb = atoi(argv[4]), num_er = atoi(argv[5]); //
-  string base_filename = base[player_to_move - 1];
-  string read_filename_str = "data/db/" + base_filename + '_' + to_string(num_b) + '-' + to_string(num_r) + '-' + to_string(num_eb) + '-' + to_string(num_er) + ".bin";
+  if(argc == 2 && string(argv[1]) == "--help") {
+    cout << "Usage: " << argv[0]
+	 << " PLAYER_TO_MOVE SELF_BLUE SELF_RED OPPONENT_BLUE OPPONENT_RED" << endl;
+    cout << "PLAYER_TO_MOVE: 1 = self, 2 = opponent. Sample 100 IDs and print each position and its label." << endl;
+    return 0;
+  }
+  if(argc != 6) {
+    cerr << "[error] Expected five arguments. Use --help for usage." << endl;
+    return 1;
+  }
+  if(string(argv[1]) != "1" && string(argv[1]) != "2") {
+    cerr << "[error] PLAYER_TO_MOVE must be 1 (self) or 2 (opponent)." << endl;
+    return 1;
+  }
   
-  unique_ptr<ZDD> zdd_check = make_unique<ZDD>(num_b, num_r, num_eb + num_er);
-  Posi p;
+  int player_to_move = atoi(argv[1]);
+  int self_blue_count = atoi(argv[2]), self_red_count = atoi(argv[3]), opponent_blue_count = atoi(argv[4]), opponent_red_count = atoi(argv[5]);
+  string table_filename_prefix = table_filename_prefixes[player_to_move - 1];
+  string database_path = "data/db/" + table_filename_prefix + '_' + to_string(self_blue_count) + '-' + to_string(self_red_count) + '-' + to_string(opponent_blue_count) + '-' + to_string(opponent_red_count) + ".bin";
   
-  unsigned long long int tbl_dbg[100];
-  mt19937_64 rng(high_resolution_clock::now().time_since_epoch().count());
-  uniform_int_distribution<unsigned long long int> dist(0, placement_count[num_b][num_r][num_eb + num_er] - 1);
-  for(int k = 0; k < 100; k++) {
-    tbl_dbg[k] = dist(rng);
+  unique_ptr<ZDD> zdd = make_unique<ZDD>(self_blue_count, self_red_count, opponent_blue_count + opponent_red_count);
+  Posi position;
+
+  // Sample with replacement; seed the generator from the current clock.
+  unsigned long long int sampled_configuration_ids[100];
+  mt19937_64 random_engine(high_resolution_clock::now().time_since_epoch().count());
+  uniform_int_distribution<unsigned long long int> configuration_id_distribution(0, placement_count[self_blue_count][self_red_count][opponent_blue_count + opponent_red_count] - 1);
+  for(int sample_index = 0; sample_index < 100; sample_index++) {
+    sampled_configuration_ids[sample_index] = configuration_id_distribution(random_engine);
   }
 
-  std::ifstream file(read_filename_str, std::ios::binary);
-  if (!file) {
-    std::cerr << "Failed to open the file\n";
+  std::ifstream database_file(database_path, std::ios::binary);
+  if (!database_file) {
+    cerr << "[error] Failed to open database: " << database_path << endl;
     return 1;
   }
 
-  for(int k = 0; k < 100; k++) {
-    unsigned long long int seek_id = (tbl_dbg[k] / 2) + 1;
-    file.seekg(static_cast<std::streamoff>(seek_id)); // ← byte offset to read (0-based)
+  for(int sample_index = 0; sample_index < 100; sample_index++) {
+    // Preserve the existing reader: skip 1 byte, then read two 4-bit entries per byte.
+    unsigned long long int entry_byte_offset = (sampled_configuration_ids[sample_index] / 2) + 1;
+    database_file.seekg(static_cast<std::streamoff>(entry_byte_offset));
 
-    char byte;
-    file.read(&byte, 1);
-    
-    if(tbl_dbg[k] % 2 == 1) byte = byte >> 4U;
-    unsigned int val = byte & 15U;
+    char packed_labels;
+    database_file.read(&packed_labels, 1);
 
-    if(val != v_lose) continue;
+    // Odd IDs use the upper nibble; even IDs use the lower nibble.
+    if(sampled_configuration_ids[sample_index] % 2 == 1) packed_labels = packed_labels >> 4U;
+    unsigned int label_code = packed_labels & 15U;
     
-    std::cout << "id of this configuration：" << tbl_dbg[k] << endl;
+    cout << "[lookup] configuration_id: " << sampled_configuration_ids[sample_index] << endl;
 
-    p.make_posi(tbl_dbg[k], *zdd_check, num_b, num_r, num_eb, num_er);
-    p.print();
+    position.make_posi(sampled_configuration_ids[sample_index], *zdd, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
+    position.print();
     
-    std::cout << "label index = " << val;
+    cout << "[lookup] label_code: " << label_code;
     
-    if (val == v_unknown) std::cout << ", label: unknown" << endl;
-    else if (val == v_win) std::cout << ", label：win" << endl;
-    else if (val == v_lose) std::cout << ", label：lose" << endl;
+    if(label_code == v_unknown) cout << ", label: unknown" << endl;
+    else if(label_code == v_win) cout << ", label: forced win (FW)" << endl;
+    else if(label_code == v_lose) cout << ", label: forced loss (FL)" << endl;
     else {
-      assert(val == v_can_lose || val == 5);
-      std::cout << ", label：can lose" << endl;
+      assert(label_code == v_can_lose || label_code == 5);
+      cout << ", label：can lose (CL)" << endl;
     }
   }
 
-  file.close();
+  database_file.close();
 
   return 0;
 }

@@ -1,5 +1,6 @@
-// Analysis program for forced-win, can-lose, and forced-loss labels
-// Database with 2 bits per entry
+// Construct Geister endgame databases by retrograde analysis.
+// Labels: forced win (FW), can lose (CL), and forced loss (FL).
+// Each database entry uses 2 bits.
 #include <deque>
 #include <cassert>
 #include <algorithm>
@@ -21,107 +22,104 @@ using std::cref;
 
 using namespace std;
 
-// int NUM_B, NUM_R, NUM_EB, NUM_ER;
+constexpr int worker_count = 7;  // number of worker threads (excluding the coordinator)
+constexpr int input_queue_capacity = 2048;    
+constexpr int output_queue_capacity = 256;
+constexpr int max_legal_moves = 32;
+constexpr int max_compatible_configurations = 70;
 
-constexpr int nworker = 7;  // number of parallel threads
-constexpr int deq_input_size = 2048;    
-constexpr int deq_output_size = 256;
-constexpr int max_legal_num = 32;
-constexpr int max_belief_state = 70;
+condition_variable coordinator_cv;   // singals completed worker tasks
+condition_variable worker_cv;   // signals tasks or shutdown
+mutex queue_mutex;   // protects task queues and the shutdown flag
 
-condition_variable cv_boss;     //condition_variable are also used for thread synchronization
-condition_variable cv_worker;   
-mutex mtx;  
-// POSIX threading
-// name of the POSIX interface
-// use a POSIX thread mutex here
+bool shutdown_requested;   // worker shutdown request
 
-bool flag_worker_quit; // flag indicating whether all configurations have been analyzed once
-int flag = 0;
-unsigned long long int search_id = 0ULL;
-
-// class representing a task
-class Work {
+// Reusable task: configuration ID, initial label, and computed child information.
+class AnalysisTask {
 private:
-  unsigned long long int m_id;   // assigned ID
-  unsigned int m_value;   // original value
-  int m_nchild;   // number of legal moves for m_id
-  int m_num_of_un;   // number of third-party configurations predicted for m_id
-  // After applying the move and configuration
-  int m_captured_piece_type[max_legal_num][max_belief_state]; // color of the captured piece
-  long long int m_array_id[max_legal_num][max_belief_state]; // ID of the non-terminal configuration
-  int m_captured_piece_type_opp[max_belief_state][max_legal_num];
-  long long int m_array_id_opp[max_belief_state][max_legal_num];
-  long long int m_array_id_opp_e[max_belief_state];
+  unsigned long long int m_configuration_id;   // configuration ID
+  unsigned int m_initial_label;   // label before this task is processed
+  int m_legal_move_count;   // number of legal moves
+  int m_compatible_configuration_count;   // compatible third-party configuration count
+  // Child information indexed by [move][third-party configuration].
+  // Capture codes: 0 = none, 1 = blue, 2 = red.
+  int m_captured_piece_type[max_legal_moves][max_compatible_configurations];
+  // Nonnegative values are child IDs; -1 and -2 represent terminal wins and losses.
+  long long int m_child_results[max_legal_moves][max_compatible_configurations];
+  int m_loss_captured_piece_types[max_compatible_configurations][max_legal_moves];
+  long long int m_loss_child_results[max_compatible_configurations][max_legal_moves];
+  long long int m_reversed_configuration_ids[max_compatible_configurations];
 
 public:
-  Work() noexcept {}
-  Work(unsigned long long int id) noexcept : m_id(id) {}
-  void set_id(unsigned long long int id, unsigned int value) noexcept {
-    m_id = id;
-    m_value = value;
+  AnalysisTask() noexcept {}
+  AnalysisTask(unsigned long long int configuration_id) noexcept : m_configuration_id(configuration_id) {}
+  void set_configuration(unsigned long long int configuration_id, unsigned int label) noexcept {
+    m_configuration_id = configuration_id;
+    m_initial_label = label;
   }
-  void set(int nchild, int num_of_un, int captured_piece_type[max_legal_num][max_belief_state], long long int array_id[max_legal_num][max_belief_state]) noexcept {
-    assert(nchild > 0 && nchild <= max_legal_num);
-    assert(num_of_un > 0 && num_of_un <= max_belief_state);
-    m_nchild = nchild;
-    m_num_of_un = num_of_un;
-    for(int i = 0; i < m_nchild; i++) {
-      for(int j = 0; j < m_num_of_un; j++) {
+  void set_move_children(int legal_move_count, int compatible_configuration_count, int captured_piece_type[max_legal_moves][max_compatible_configurations], long long int child_results[max_legal_moves][max_compatible_configurations]) noexcept {
+    assert(legal_move_count > 0 && legal_move_count <= max_legal_moves);
+    assert(compatible_configuration_count > 0 && compatible_configuration_count <= max_compatible_configurations);
+    m_legal_move_count = legal_move_count;
+    m_compatible_configuration_count = compatible_configuration_count;
+    for(int i = 0; i < m_legal_move_count; i++) {
+      for(int j = 0; j < m_compatible_configuration_count; j++) {
 	m_captured_piece_type[i][j] = captured_piece_type[i][j];
-	m_array_id[i][j] = array_id[i][j];
+	m_child_results[i][j] = child_results[i][j];
       }
     }
   }
-  void set_opp(int num_of_un, long long int array_id_opp_e[max_belief_state]) noexcept {
-    assert(num_of_un > 0 && num_of_un <= max_belief_state);
-    m_num_of_un = num_of_un;
-    for(int i = 0; i < m_num_of_un; i++) {
-      m_array_id_opp_e[i] = array_id_opp_e[i];
+  // Store reversed IDs for forced-loss checks on even iterations.
+  void set_loss_children(int compatible_configuration_count, long long int reversed_configuration_ids[max_compatible_configurations]) noexcept {
+    assert(compatible_configuration_count > 0 && compatible_configuration_count <= max_compatible_configurations);
+    m_compatible_configuration_count = compatible_configuration_count;
+    for(int i = 0; i < m_compatible_configuration_count; i++) {
+      m_reversed_configuration_ids[i] = reversed_configuration_ids[i];
     }
   }
-  void set_opp(int nchild, int num_of_un, int captured_piece_type_opp[max_belief_state][max_legal_num], long long int array_id_opp[max_belief_state][max_legal_num]) noexcept {
-    assert(nchild > 0 && nchild <= max_legal_num);
-    assert(num_of_un > 0 && num_of_un <= max_belief_state);
-    m_nchild = nchild;
-    m_num_of_un = num_of_un;
-    for(int i = 0; i < m_num_of_un; i++) {
-      for(int j = 0; j < m_nchild; j++) {
-	m_captured_piece_type_opp[i][j] = captured_piece_type_opp[i][j];
-	m_array_id_opp[i][j] = array_id_opp[i][j];
+  // Store children indexed by [third-party configuration][move] for forced-loss checks.
+  void set_loss_children(int legal_move_count, int compatible_configuration_count, int loss_captured_piece_types[max_compatible_configurations][max_legal_moves], long long int loss_child_results[max_compatible_configurations][max_legal_moves]) noexcept {
+    assert(legal_move_count > 0 && legal_move_count <= max_legal_moves);
+    assert(compatible_configuration_count > 0 && compatible_configuration_count <= max_compatible_configurations);
+    m_legal_move_count = legal_move_count;
+    m_compatible_configuration_count = compatible_configuration_count;
+    for(int i = 0; i < m_compatible_configuration_count; i++) {
+      for(int j = 0; j < m_legal_move_count; j++) {
+	m_loss_captured_piece_types[i][j] = loss_captured_piece_types[i][j];
+	m_loss_child_results[i][j] = loss_child_results[i][j];
       }
     }
   }
-  unsigned long long int get_id() const noexcept { return m_id; }
-  unsigned int get_value() const noexcept { return m_value; }
-  void get(int& nchild, int& num_of_un, int captured_piece_type[max_legal_num][max_belief_state], long long int array_id[max_legal_num][max_belief_state]) const noexcept {
-    assert(m_nchild > 0 && m_nchild <= max_legal_num);
-    assert(m_num_of_un > 0 && m_num_of_un <= max_belief_state);
-    nchild = m_nchild;
-    num_of_un = m_num_of_un;
-    for(int i = 0; i < m_nchild; i++) {
-      for(int j = 0; j < m_num_of_un; j++) {
+  unsigned long long int get_configuration_id() const noexcept { return m_configuration_id; }
+  unsigned int get_initial_label() const noexcept { return m_initial_label; }
+  void get_move_children(int& legal_move_count, int& compatible_configuration_count, int captured_piece_type[max_legal_moves][max_compatible_configurations], long long int child_results[max_legal_moves][max_compatible_configurations]) const noexcept {
+    assert(m_legal_move_count > 0 && m_legal_move_count <= max_legal_moves);
+    assert(m_compatible_configuration_count > 0 && m_compatible_configuration_count <= max_compatible_configurations);
+    legal_move_count = m_legal_move_count;
+    compatible_configuration_count = m_compatible_configuration_count;
+    for(int i = 0; i < m_legal_move_count; i++) {
+      for(int j = 0; j < m_compatible_configuration_count; j++) {
 	captured_piece_type[i][j] = m_captured_piece_type[i][j];
-	array_id[i][j] = m_array_id[i][j];
+	child_results[i][j] = m_child_results[i][j];
       }
     }
   }
-  void get_opp(int& num_of_un, long long int array_id_opp_e[max_belief_state]) const noexcept {
-    assert(m_num_of_un > 0 && m_num_of_un <= max_belief_state);
-    num_of_un = m_num_of_un;
-    for(int i = 0; i < m_num_of_un; i++) {
-      array_id_opp_e[i] = m_array_id_opp_e[i];
+  void get_loss_children(int& compatible_configuration_count, long long int reversed_configuration_ids[max_compatible_configurations]) const noexcept {
+    assert(m_compatible_configuration_count > 0 && m_compatible_configuration_count <= max_compatible_configurations);
+    compatible_configuration_count = m_compatible_configuration_count;
+    for(int i = 0; i < m_compatible_configuration_count; i++) {
+      reversed_configuration_ids[i] = m_reversed_configuration_ids[i];
     }
   }
-  void get_opp(int& nchild, int& num_of_un, int captured_piece_type_opp[max_belief_state][max_legal_num], long long int array_id_opp[max_belief_state][max_legal_num]) const noexcept {
-    assert(m_nchild > 0 && m_nchild <= max_legal_num);
-    assert(m_num_of_un > 0 && m_num_of_un <= max_belief_state);
-    nchild = m_nchild;
-    num_of_un = m_num_of_un;
-    for(int i = 0; i < m_num_of_un; i++) {
-      for(int j = 0; j < m_nchild; j++) {
-	captured_piece_type_opp[i][j] = m_captured_piece_type_opp[i][j];
-	array_id_opp[i][j] = m_array_id_opp[i][j];
+  void get_loss_children(int& legal_move_count, int& compatible_configuration_count, int loss_captured_piece_types[max_compatible_configurations][max_legal_moves], long long int loss_child_results[max_compatible_configurations][max_legal_moves]) const noexcept {
+    assert(m_legal_move_count > 0 && m_legal_move_count <= max_legal_moves);
+    assert(m_compatible_configuration_count > 0 && m_compatible_configuration_count <= max_compatible_configurations);
+    legal_move_count = m_legal_move_count;
+    compatible_configuration_count = m_compatible_configuration_count;
+    for(int i = 0; i < m_compatible_configuration_count; i++) {
+      for(int j = 0; j < m_legal_move_count; j++) {
+	loss_captured_piece_types[i][j] = m_loss_captured_piece_types[i][j];
+	loss_child_results[i][j] = m_loss_child_results[i][j];
       }
     }
   }
@@ -155,669 +153,723 @@ constexpr unsigned long long int placement_count[5][5][9] {
     , {0ULL, 0ULL, 800688596400ULL, 6939301168800ULL, 43370632305000ULL, 208179035064000ULL, 798019634412000ULL, 2508061708152000ULL, 6583661983899000ULL} }
 };
 
-const string base[2] = {"self_table", "enemy_table"};
-	  
-unsigned long long int nwin = 0, nlose = 0, ncan_lose = 0; // number of newly assigned labels of each type (for verigication)
+const string table_filename_prefixes[2] = {"self_table", "enemy_table"};
 
-unsigned long long int count_changes = 0ULL;   // number of updates (stop the search when it reaches 0)
+// assignments in this pass
+unsigned long long int fw_assignment_count = 0, fl_assignment_count = 0, cl_assignment_count = 0;
 
-// queue for exchanging tasks between the boss and workers
-// the boss stores tasks here, and workers retrieve them to find legal moves
-deque<Work *> deq_input;
-// workers store the computed IDs here, and the boss writes value to the table
-deque<Work *> deq_output;
+unsigned long long int label_update_count = 0ULL;   // updates in this pass
 
-// Boss function
-static void boss(int iter, int num_b, int num_r, int num_eb, int num_er,
-		 Table& parent_table, const char* write_filename,
-		 const Table& child_table, const Table& child_table_cap_b, const Table& child_table_cap_r,
-		 const Table& child_table_opp) noexcept {
-  std::cout << "boss" << endl;
+// The coordinator queues configurations for workers to expand.
+deque<AnalysisTask *> input_queue;
+// Workers return child information for the coordinator to assign labels.
+deque<AnalysisTask *> output_queue;
 
-  nwin = 0, nlose = 0, ncan_lose = 0;
-  count_changes = 0ULL;
+// Schedule tasks, assign labels from worker results, and write the database.
+static void run_coordinator(int iteration, int self_blue_count, int self_red_count, int opponent_blue_count, int opponent_red_count,
+		 Table& parent_table, const char* output_database_path,
+		 const Table& child_table, const Table& child_table_after_blue_capture, const Table& child_table_after_red_capture,
+		 const Table& child_table_reversed) noexcept {
+  cout << "[analysis] Starting configuration scan" << endl;
+
+  fw_assignment_count = 0, fl_assignment_count = 0, cl_assignment_count = 0;
+  label_update_count = 0ULL;
   
-  unsigned long long int max_placement = placement_count[num_b][num_r][num_eb + num_er];
-  unsigned long long int count_input = 0ULL;  // number of configurations checked to determine whether they should be analyed in this iteration
-  unsigned long long int count_output = 0ULL; // number of configurations whose processing has been completed
-  
-  int nstack_work_idle = deq_input_size + deq_output_size + nworker;  // number of tasks that can currently be processed
-  Work* stack_work_idle[nstack_work_idle];    // array for storing tasks
-  for(int i = 0; i < nstack_work_idle; i++) stack_work_idle[i] = new Work;  // initialize the array with empty tasks
-  
-  while(true) {  // repeat until there are no tasks left
-    unique_lock<mutex> lck(mtx);  // lock the mutex; mtx is automatically unlocked when the unique_lock instance lck is destroyed
-    cv_boss.wait(lck, [&](){  // wait (unique_lock instance, lambda expression capturing by reference)
-			return (((deq_input.size() < deq_input_size) && (deq_output.size() < deq_output_size) && (count_input < max_placement))
-				|| (0 < deq_output.size())); });
-    // wait until deq_input and deq_output have enough free space
-    // wait blocks while the condition is false and returns when the condition becomes true
-    // Condition : the return value of the function passed as the second argument
-    // the condition may be checked at any time
-    // while wait is blocking, the lock passed as the first argument (lck) is released
-    // releasing the lock and entering the waiting state are performed atomically
+  unsigned long long int configuration_count = placement_count[self_blue_count][self_red_count][opponent_blue_count + opponent_red_count];
+  // number of configuration IDs scanned in this pass
+  unsigned long long int scanned_configuration_count = 0ULL;
+  // number of completed or skipped configurations
+  unsigned long long int completed_configuration_count = 0ULL;
 
-    // when wait returns, the lock has been reacquired
-    // after waking up, the predicate is evaluated again; if false, the lock is released and the thread waits again
-    // if true, wait returns
-    
-    // if deq_input and deq_output are small enough, find an ID that needs to be analyzed and create a task for it (Step 1)
-    if ((deq_input.size() < deq_input_size) && (deq_output.size() < deq_output_size) && count_input < max_placement) {
-      // retrieve the value from the retrograde analysis table
+  // current number of reusable tasks
+  int available_task_count = input_queue_capacity + output_queue_capacity + worker_count;
+  AnalysisTask* available_tasks[available_task_count];   // array for storing tasks
+  // initialize the array with empty tasks
+  for(int i = 0; i < available_task_count; i++) available_tasks[i] = new AnalysisTask;
+  
+  while(true) {
+    unique_lock<mutex> queue_lock(queue_mutex);
+    // Wait for queue capacity or completed results; release the mutex white blocked.
+    coordinator_cv.wait(queue_lock, [&](){
+      return (((input_queue.size() < input_queue_capacity) && (output_queue.size() < output_queue_capacity) && (scanned_configuration_count < configuration_count))
+				|| (0 < output_queue.size())); });
+
+    // Queue the next configuration requiring analysis when both queues have capacity.
+    if ((input_queue.size() < input_queue_capacity) && (output_queue.size() < output_queue_capacity) && scanned_configuration_count < configuration_count) {
+      // retrieve the label from the retrograde analysis table
       // continue the analysis if the label is unknown or can-lose
-      unsigned int before_value;
-      while(count_input < max_placement && (before_value = parent_table.get(count_input)) != v_unknown && before_value != v_can_lose) {
+      unsigned int initial_label;
+      while(scanned_configuration_count < configuration_count && (initial_label = parent_table.get(scanned_configuration_count)) != v_unknown && initial_label != v_can_lose) {
 	// keep incrementing the ID until an unknown or can-lose label is found
-	count_input++;
-	count_output++;
+	scanned_configuration_count++;
+	completed_configuration_count++;
       }
 
-      if(count_input >= max_placement) {
-	lck.unlock();
+      if(scanned_configuration_count >= configuration_count) {
+	queue_lock.unlock();
 	continue;
       }
+      
+      assert(available_task_count >= 1);
+      // retrieve a task to assign from available_tasks
+      AnalysisTask *task = available_tasks[ --available_task_count ];
+      // set the configuration ID and the label assigned by the previous analysis for the worker
+      task->set_configuration(scanned_configuration_count, initial_label);
+      input_queue.push_front(task);
+      queue_lock.unlock();
+      scanned_configuration_count++;
+      
+      if(scanned_configuration_count % 1000000000ULL == 0ULL)
+	cout << "[progress] scanned_configurations: " << scanned_configuration_count
+	     << ", FW_assignments: " << fw_assignment_count
+	     << ", CL_assignments: " << cl_assignment_count
+	     << ", FL_assignments: " << fl_assignment_count << endl;
 
-      // if(count_input % 1000000000ULL == 0ULL) std::cout << "count_input: " << count_input << ", nwin: " << nwin << ", nexist_lose: " << ncan_lose << ", nunknown: " << nunknown << endl;
-                
-      assert(nstack_work_idle >= 1);
-      Work *pw = stack_work_idle[ --nstack_work_idle ];   // retrieve a task to assign from stack_work_idle
-      pw->set_id(count_input, before_value);    // set the configuration ID and the value assigned by the previous analysis for the worker
-      deq_input.push_front(pw);   // add a task
-      lck.unlock();
-      count_input++;
-      
-      if(count_input % 1000000000ULL == 0ULL) std::cout << "count_input: " << count_input << ", nwin: " << nwin << ", ncan_lose: " << ncan_lose << ", nlose: " << nlose << endl;
-      
-      cv_worker.notify_one();   // wake up one worker thread
-    } else {    // if tasks have accumulated (step 3)
-      if (0 < deq_output.size()) {
-	assert(0 < deq_output.size());
-	deque<Work *> deq_tmp; // use swap
-	swap(deq_tmp, deq_output);
+      // wake up one worker thread
+      worker_cv.notify_one();
+    // consume completed worker tasks
+    } else {
+      if (0 < output_queue.size()) {
+	deque<AnalysisTask *> completed_tasks;
+	// Take ownership of results so label assignment can proceed outside the lock
+	swap(completed_tasks, output_queue);
 	
-	// empty deq_output
-	deq_output.clear();
-	lck.unlock();   // swap with deq_tmp, which is not accessed by other threads, to release the lock sooner
-	count_output += deq_tmp.size();
-	for (unsigned int workid = 0; workid < deq_tmp.size(); workid++) {
-	  unsigned long long int id = deq_tmp[workid]->get_id();  // retrieve the assigned ID from the task
-	  unsigned int value = deq_tmp[workid]->get_value();
+	output_queue.clear();
+	// swap with completed_tasks, which is not accessed by other threads, to release the lock sooner
+	queue_lock.unlock();
+	completed_configuration_count += completed_tasks.size();
+	for (unsigned int task_index = 0; task_index < completed_tasks.size(); task_index++) {
+	  // retrieve the assigned ID from the task
+	  unsigned long long int configuration_id = completed_tasks[task_index]->get_configuration_id();
+	  unsigned int label = completed_tasks[task_index]->get_initial_label();
 	  
-	  if(value == v_unknown) {   // if the previous value is unknown
-	    int nchild, num_of_un;
-	    int captured_piece_type[max_legal_num][max_belief_state];
-	    long long int array_id[max_legal_num][max_belief_state];
+	  if(label == v_unknown) {
+	    int legal_move_count, compatible_configuration_count;
+	    int captured_piece_type[max_legal_moves][max_compatible_configurations];
+	    long long int child_results[max_legal_moves][max_compatible_configurations];
 	    // retrieve all information needed to determine forced-win and can-lose labels
-	    deq_tmp[workid]->get(nchild, num_of_un, captured_piece_type, array_id);
-	    bool already_decided = false;
-	    int num_of_action = nchild;
+	    completed_tasks[task_index]->get_move_children(legal_move_count, compatible_configuration_count, captured_piece_type, child_results);
+	    bool label_assigned = false;
+	    int action_count = legal_move_count;
 	    
-	    assert(nchild > 0);   // Invalid: there should be at least one child
-	    int win_plan_num = 0;  // number of forced-win strategies
-	    int can_lose_plan_num = 0;  // number of exist-loss strategies
-	    for(int j = 0; j < num_of_action; j++) {
-	      int kati = 0;
-	      int make = 0;
-	      int makeari = 0;
-	      int humei = 0;
-	      for(int k = 0; k < num_of_un; k++) {
-		long long int num_of_haiti = array_id[j][k];
-		if(num_of_haiti >= 0) {   // not terminal; retrieve the value from the database
-		  int child_val;
-		  int which_table = captured_piece_type[j][k];
+	    assert(legal_move_count > 0);
+	    int winning_move_count = 0;  // moves satisfying the forced-win condition
+	    int can_lose_move_count = 0;  // moves satisfying the can-lose condition
+	    for(int j = 0; j < action_count; j++) {
+	      int win_count = 0;
+	      int loss_count = 0;
+	      int can_lose_count = 0;
+	      int unknown_count = 0;
+	      for(int k = 0; k < compatible_configuration_count; k++) {
+		long long int child_result = child_results[j][k];
+		// not terminal; retrieve the label from the database
+		if(child_result >= 0) {
+		  int child_label;
+		  int captured_piece = captured_piece_type[j][k];
 		  // no piece captured
-		  if(which_table == 0) child_val = child_table.get((unsigned long long int)num_of_haiti);
+		  if(captured_piece == 0) child_label = child_table.get((unsigned long long int)child_result);
 		  // blue piece captured
-		  else if(which_table == 1) child_val = child_table_cap_b.get((unsigned long long int)num_of_haiti);
+		  else if(captured_piece == 1) child_label = child_table_after_blue_capture.get((unsigned long long int)child_result);
 		  // red piece captured
 		  else {
-		    assert(which_table == 2);
-		    child_val = child_table_cap_r.get((unsigned long long int)num_of_haiti);
+		    assert(captured_piece == 2);
+		    child_label = child_table_after_red_capture.get((unsigned long long int)child_result);
 		  }
 		  
-		  if(child_val == v_win) kati++;
-		  else if(child_val == v_lose) make++;
-		  else if(child_val == v_can_lose) makeari++;
+		  if(child_label == v_win) win_count++;
+		  else if(child_label == v_lose) loss_count++;
+		  else if(child_label == v_can_lose) can_lose_count++;
 		  else {
-		    assert(child_val == v_unknown);
-		    humei++;
+		    assert(child_label == v_unknown);
+		    unknown_count++;
 		  }
 		} else {
-		  if(num_of_haiti == -1) {
-		    // player1 wins
-		    kati++;
-		  } else if(num_of_haiti == -2) {
-		    // player2 loses
-		    make++;
+		  if(child_result == -1) {
+		    // terminal win for the database perspective
+		    win_count++;
+		  } else if(child_result == -2) {
+		    // terminal loss for the database perspective
+		    loss_count++;
 		  } else {
 		    // Do not count this move because it is illegal
 		  }
 		}
 	      }
-	      
-	      if(kati == num_of_un) { // forced win
-		if(iter % 2 == 1) {
-		  if(!already_decided) {
-		    parent_table.set(id, v_win);
-		    nwin++, count_changes++;
-		    already_decided = true;
-		    value = v_win;
+
+	      // forced win
+	      if(win_count == compatible_configuration_count) {
+		if(iteration % 2 == 1) {
+		  if(!label_assigned) {
+		    parent_table.set(configuration_id, v_win);
+		    fw_assignment_count++, label_update_count++;
+		    label_assigned = true;
+		    label = v_win;
 		  }
 		} else {
-		  win_plan_num++;
+		  winning_move_count++;
 		}
-	      } else if(make + makeari >= 1) { // can lose
-		if(iter % 2 == 1) {
-		  can_lose_plan_num++;
+		// can lose
+	      } else if(loss_count + can_lose_count >= 1) {
+		if(iteration % 2 == 1) {
+		  can_lose_move_count++;
 		} else {
-		  if(!already_decided) {
-		    parent_table.set(id, v_can_lose);
-		    value = v_can_lose;
-		    ncan_lose++;
-		    count_changes++;
-		    already_decided = true;
+		  if(!label_assigned) {
+		    parent_table.set(configuration_id, v_can_lose);
+		    label = v_can_lose;
+		    cl_assignment_count++;
+		    label_update_count++;
+		    label_assigned = true;
 		  }
 		}
 	      }
 	    }
 	  
 	    // after checking all legal moves
-	    if(!already_decided) {
-	      if(iter % 2 == 1) {
-		if(can_lose_plan_num == num_of_action) {  // can lose
-		  parent_table.set(id, v_can_lose);
-		  value = v_can_lose;
-		  ncan_lose++;
-		  count_changes++;
+	    if(!label_assigned) {
+	      if(iteration % 2 == 1) {
+		// can lose
+		if(can_lose_move_count == action_count) {
+		  parent_table.set(configuration_id, v_can_lose);
+		  label = v_can_lose;
+		  cl_assignment_count++;
+		  label_update_count++;
 		}
 	      } else {
-		if(win_plan_num == num_of_action) { // forced win
-		  parent_table.set(id, v_win);
-		  nwin++, count_changes++;
-		  value = v_win;
+		// forced win
+		if(winning_move_count == action_count) {
+		  parent_table.set(configuration_id, v_win);
+		  fw_assignment_count++, label_update_count++;
+		  label = v_win;
 		}
 	      }
 	    }
 	  }
 
-	  if(value == v_unknown || value == v_can_lose) {   // if the previous value is unknown or can-lose
-	    if(iter % 2 == 1) {
-	      int nchild, num_of_un;
-	      int captured_piece_type_opp[max_belief_state][max_legal_num];
-	      long long int array_id_opp[max_belief_state][max_legal_num];
+	  if(label == v_unknown || label == v_can_lose) {
+	    if(iteration % 2 == 1) {
+	      int legal_move_count, compatible_configuration_count;
+	      int loss_captured_piece_types[max_compatible_configurations][max_legal_moves];
+	      long long int loss_child_results[max_compatible_configurations][max_legal_moves];
 	      // retrieve all information needed to determine forced-loss labels
-	      deq_tmp[workid]->get_opp(nchild, num_of_un, captured_piece_type_opp, array_id_opp);
-	      int num_of_action = nchild;
-	      bool already_decided = false;
-	      int lose_plan_num = 0;  // number of loss strategies
-	      assert(nchild > 0);   // Invalid: there should be at least one child
-	      for(int j = 0; j < num_of_un; j++) {
-		int kati = 0;
-		int make = 0;
-		int makeari = 0;
-		int humei = 0;
-		for(int k = 0; k < num_of_action; k++) {
-		  long long int num_of_haiti = array_id_opp[j][k];
-		
-		  if(num_of_haiti >= 0) {   // not terminal; retrieve the value from the database
-		    int child_val;
-		    int which_table = captured_piece_type_opp[j][k];
+	      completed_tasks[task_index]->get_loss_children(legal_move_count, compatible_configuration_count, loss_captured_piece_types, loss_child_results);
+	      int action_count = legal_move_count;
+	      bool label_assigned = false;
+	      // configurations satisfying the forced-loss condition
+	      int losing_configuration_count = 0;
+	      assert(legal_move_count > 0);
+	      for(int j = 0; j < compatible_configuration_count; j++) {
+		int win_count = 0;
+		int loss_count = 0;
+		int can_lose_count = 0;
+		int unknown_count = 0;
+		for(int k = 0; k < action_count; k++) {
+		  long long int child_result = loss_child_results[j][k];
+
+		  // not terminal; retrieve the label from the database
+		  if(child_result >= 0) {
+		    int child_label;
+		    int captured_piece = loss_captured_piece_types[j][k];
 		    // no piece captured
-		    if(which_table == 0) child_val = child_table.get((unsigned long long int)num_of_haiti);
+		    if(captured_piece == 0) child_label = child_table.get((unsigned long long int)child_result);
 		    // blue piece captured
-		    else if(which_table == 1) child_val = child_table_cap_b.get((unsigned long long int)num_of_haiti);
+		    else if(captured_piece == 1) child_label = child_table_after_blue_capture.get((unsigned long long int)child_result);
 		    // red piece captured
 		    else {
-		      assert(which_table == 2);
-		      child_val = child_table_cap_r.get((unsigned long long int)num_of_haiti);
+		      assert(captured_piece == 2);
+		      child_label = child_table_after_red_capture.get((unsigned long long int)child_result);
 		    }
 		    
-		    if(child_val == v_win) kati++;
-		    else if(child_val == v_lose) make++;
-		    else if(child_val == v_can_lose) makeari++;
+		    if(child_label == v_win) win_count++;
+		    else if(child_label == v_lose) loss_count++;
+		    else if(child_label == v_can_lose) can_lose_count++;
 		    else {
-		      assert(child_val == v_unknown);
-		      humei++;
+		      assert(child_label == v_unknown);
+		      unknown_count++;
 		    }
 		  } else {
-		    if(num_of_haiti == -1) {
-		      // player1 wins
-		      kati++;
-		    } else if(num_of_haiti == -2) {
-		      // player2 loses
-		      make++;
+		    if(child_result == -1) {
+		      // terminal win for the database perspective
+		      win_count++;
+		    } else if(child_result == -2) {
+		      // terminal loss for the database perspective
+		      loss_count++;
 		    } else {
 		      // Do not count this move because it is illegal
 		    }
 		  }
 		}
-	      
-		if(make == num_of_action) { // forced loss
-		  lose_plan_num++;
+
+		// forced loss
+		if(loss_count == action_count) {
+		  losing_configuration_count++;
 		}
 	      }
 	  
 	      // after checking all legal moves
-	      if(!already_decided) {
-		if(lose_plan_num == num_of_un) { // forced loss
-		  parent_table.set(id, v_lose);
-		  nlose++, count_changes++;
-		  value = v_lose;
+	      if(!label_assigned) {
+		// forced loss
+		if(losing_configuration_count == compatible_configuration_count) {
+		  parent_table.set(configuration_id, v_lose);
+		  fl_assignment_count++, label_update_count++;
+		  label = v_lose;
 		}
 	      }
 	    } else {
-	      assert(iter % 2 == 0);
-	      int num_of_un;
-	      long long int array_id_opp_e[max_belief_state];
-	      deq_tmp[workid]->get_opp(num_of_un, array_id_opp_e);
-	      int kati = 0;
-	      int make = 0;
-	      int makeari = 0;
-	      int humei = 0;
-	      for(int j = 0; j < num_of_un; j++) {
-		long long int num_of_haiti = array_id_opp_e[j];
-		assert(num_of_haiti >= 0);
-		int child_val = child_table_opp.get((unsigned long long int)num_of_haiti);
-		    
-		if(child_val == v_win) kati++;
-		else if(child_val == v_lose) make++;
-		else if(child_val == v_can_lose) makeari++;
+	      assert(iteration % 2 == 0);
+	      int compatible_configuration_count;
+	      long long int reversed_configuration_ids[max_compatible_configurations];
+	      completed_tasks[task_index]->get_loss_children(compatible_configuration_count, reversed_configuration_ids);
+	      int win_count = 0;
+	      int loss_count = 0;
+	      int can_lose_count = 0;
+	      int unknown_count = 0;
+	      for(int j = 0; j < compatible_configuration_count; j++) {
+		long long int child_result = reversed_configuration_ids[j];
+		assert(child_result >= 0);
+		int child_label = child_table_reversed.get((unsigned long long int)child_result);
+		
+		if(child_label == v_win) win_count++;
+		else if(child_label == v_lose) loss_count++;
+		else if(child_label == v_can_lose) can_lose_count++;
 		else {
-		  assert(child_val == v_unknown);
-		  humei++;
+		  assert(child_label == v_unknown);
+		  unknown_count++;
 		}
 	      }
 
-	      if(kati == num_of_un) {
-		parent_table.set(id, v_lose);
-		nlose++, count_changes++;
-		value = v_lose;
+	      if(win_count == compatible_configuration_count) {
+		parent_table.set(configuration_id, v_lose);
+		fl_assignment_count++, label_update_count++;
+		label = v_lose;
 	      }
 	    }
 	  }
 	}
-	  
-	// return the paper to the shelf
-	for(size_t i = 0; i < deq_tmp.size(); i++){
-	  assert(nstack_work_idle < 4096);
-	  stack_work_idle[ nstack_work_idle++ ] = deq_tmp[i];
+
+	// Return completed tasks to the reusable task pool.
+	for(size_t i = 0; i < completed_tasks.size(); i++){
+	  assert(available_task_count < 4096);
+	  available_tasks[ available_task_count++ ] = completed_tasks[i];
 	}
       }
-      
-      // stop if the number of processed configurations exceeds the total number of configuration
-      if (count_output >= max_placement) break;
+
+      // End this pass once every configuration has been completed or skipped.
+      if(completed_configuration_count >= configuration_count) break;
     }
-  } // when this scope ends, lck is destroyed and mtx is unlocked
+  }
   
-  cout << "before_outtable" << endl;
+  cout << "[output] Writing database: " << output_database_path << endl;
   {
-    OutTable out_table(iter, write_filename, max_placement, 2);
-    for (unsigned long long int i = 0; i < max_placement; i++) {
-      out_table.write(parent_table.get(i));   // retrieve the value of id(i) and copy it directly
+    OutTable out_table(iteration, output_database_path, configuration_count, 2);
+    for (unsigned long long int i = 0; i < configuration_count; i++) {
+      // retrieve the label of configuration_id(i) and copy it directly
+      out_table.write(parent_table.get(i));
     }
     out_table.flush();
     out_table.outinfo();
   }
   
   {
-    unique_lock<mutex> lck(mtx); // lock
-    flag_worker_quit = true; // flag indicating that the work is finished
+    unique_lock<mutex> queue_lock(queue_mutex);
+    // flag indicating that the work is finished
+    shutdown_requested = true;
   }
-  cv_worker.notify_all();
+  worker_cv.notify_all();
 }
-  
-static void worker(int iter, int num_b, int num_r, int num_eb, int num_er,
-		   const ZDD& zdd_parent, const ZDD& zdd_child_cap_b, const ZDD& zdd_child_cap_r,
-		   const ZDD& zdd_parent_opp) noexcept {
-  Work *w;
-  while (true) {   // repeat until all tasks are completed
-    unique_lock<mutex> lck(mtx);   // lock
-    // unlock the mutex
-    cv_worker.wait(lck, [&](){ if (0 < deq_input.size()) return true;
-	return flag_worker_quit; });   // wait until a task is available or all tasks have been completed
-    // lock
-    if (flag_worker_quit) break;   // exit if all tasks have been completed
-    assert(0 < deq_input.size());   // at least one task is available
-    w = deq_input.back();   // retrieve a task from deq_input (copy)
-    deq_input.pop_back();   // remove the retrieved task
-    lck.unlock();   // unlock the mutex used to prevent concurrent access to deq_input
+
+// Expand queued configurations and return child information without assigning labels.
+static void run_worker(int iteration, int self_blue_count, int self_red_count, int opponent_blue_count, int opponent_red_count,
+		       const ZDD& zdd_parent, const ZDD& zdd_child_after_blue_capture, const ZDD& zdd_child_after_red_capture,
+		   const ZDD& zdd_parent_reversed) noexcept {
+  AnalysisTask *task;
+  while (true) {
+    unique_lock<mutex> queue_lock(queue_mutex);
+    // wait releases queue_mutex while blocked and reacquires it before returning.
+    worker_cv.wait(queue_lock, [&](){ if(0 < input_queue.size()) return true;
+	// wait until a task is available or all tasks have been completed
+	return shutdown_requested; });
+    // exit if all tasks have been completed
+    if(shutdown_requested) break;
+    assert(0 < input_queue.size());
+    // retrieve a task pointer from input_queue
+    task = input_queue.back();
+    input_queue.pop_back();
+    // unlock the mutex used to prevent concurrent access to input_queue
+    queue_lock.unlock();
     
     // set all child IDs or direct outcomes for the assigned configuration ID
-    unsigned long long int id = w->get_id();
-    unsigned int value = w->get_value();
-    if(value == v_unknown) {
-      Posi p;
-      p.make_posi(id, zdd_parent, num_b, num_r, num_eb, num_er);   // create the position for a given ID
-      Action actions[max_legal_num];
-      unsigned char board_belief[70][36];
-      int nchild = p.compute_actions(actions, iter);   // enumerate legal moves for the position
-      int num_of_un = p.getunknowninfo(board_belief);   // enumerate all possible third-party configurations for the position
-      assert(nchild > 0 && nchild < max_legal_num);
-      assert(num_of_un > 0 && num_of_un <= max_belief_state);
+    unsigned long long int configuration_id = task->get_configuration_id();
+    unsigned int label = task->get_initial_label();
+    if(label == v_unknown) {
+      Posi position;
+      // create the position for a given ID
+      position.make_posi(configuration_id, zdd_parent, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
+      Action actions[max_legal_moves];
+      unsigned char compatible_boards[max_compatible_configurations][36];
+      // enumerate legal moves for the position
+      int legal_move_count = position.compute_actions(actions, iteration);
+      // enumerate all possible third-party configurations for the position
+      int compatible_configuration_count = position.getunknowninfo(compatible_boards);
+      assert(legal_move_count > 0 && legal_move_count < max_legal_moves);
+      assert(compatible_configuration_count > 0 && compatible_configuration_count <= max_compatible_configurations);
       
-      int captured_piece_type[max_legal_num][max_belief_state] = {};
-      long long int array_id[max_legal_num][max_belief_state];
+      int captured_piece_type[max_legal_moves][max_compatible_configurations] = {};
+      long long int child_results[max_legal_moves][max_compatible_configurations];
       
-      for(int i = 0; i < nchild; i++) {
-	for(int j = 0; j < num_of_un; j++) {
-	  p.make_posi_n(board_belief, j);   // create a configuration from a third-party perspective
-	  int board_check = p.make_action(actions[i]);   // apply the legal move
-	  if(board_check >= 0) {   // the game is not decided directly
-	    p.make_posi_myself();
-	    if(board_check == 0) {
-	      array_id[i][j] = p.getzddnum(zdd_parent);
-	    } else if(board_check == 1) {
-	      array_id[i][j] = p.getzddnum(zdd_child_cap_b);
+      for(int i = 0; i < legal_move_count; i++) {
+	for(int j = 0; j < compatible_configuration_count; j++) {
+	  // create a configuration from a third-party perspective
+	  position.make_posi_n(compatible_boards, j);
+	  int move_result = position.make_action(actions[i]);
+	  // the game is not decided directly
+	  if(move_result >= 0) {
+	    position.make_posi_myself();
+	    if(move_result == 0) {
+	      child_results[i][j] = position.getzddnum(zdd_parent);
+	    } else if(move_result == 1) {
+	      child_results[i][j] = position.getzddnum(zdd_child_after_blue_capture);
 	      captured_piece_type[i][j] = 1;
 	    } else {
-	      assert(board_check == 2);
-	      array_id[i][j] = p.getzddnum(zdd_child_cap_r);
+	      assert(move_result == 2);
+	      child_results[i][j] = position.getzddnum(zdd_child_after_red_capture);
 	      captured_piece_type[i][j] = 2;
 	    }
 	  } else {
-	    array_id[i][j] = board_check;
+	    child_results[i][j] = move_result;
 	  }
-	  p.undo_action();
+	  position.undo_action();
 	}
       }
       // set the child ID, captured piece, and other information
-      w->set(nchild, num_of_un, captured_piece_type, array_id);
-    }
-
-    if(value == v_unknown || value == v_can_lose) {
-      Posi p;
-      p.make_posi(id, zdd_parent, num_b, num_r, num_eb, num_er);   // create the position for a given ID
-      Action actions[max_legal_num];
-      unsigned char board_belief[70][36];
-      int nchild = p.compute_actions(actions, iter);   // enumerate legal moves for the position
-      int num_of_un = p.getunknowninfo(board_belief);   // enumerate all possible third-party configurations for the position
-      assert(nchild > 0 && nchild < max_legal_num);
-      assert(num_of_un > 0 && num_of_un <= max_belief_state);
-
-      if(iter % 2 == 1) {
-	int captured_piece_type_opp[max_belief_state][max_legal_num] = {};
-	long long int array_id_opp[max_belief_state][max_legal_num];
-      
-	for(int i = 0; i < num_of_un; i++) {
-	  for(int j = 0; j < nchild; j++) {
-	    p.make_posi_n(board_belief, i);   // create a configuration from a third-party perspective
-	    int board_check = p.make_action(actions[j]);   // apply the legal move
-	    if(board_check >= 0) {   // the game is not decided directly
-	      p.make_posi_myself();
-	      if(board_check == 0) {
-		array_id_opp[i][j] = p.getzddnum(zdd_parent);
-	      } else if(board_check == 1) {
-		array_id_opp[i][j] = p.getzddnum(zdd_child_cap_b);
-		captured_piece_type_opp[i][j] = 1;
-	      } else {
-		assert(board_check == 2);
-		array_id_opp[i][j] = p.getzddnum(zdd_child_cap_r);
-		captured_piece_type_opp[i][j] = 2;
-	      }
-	    } else {
-	      array_id_opp[i][j] = board_check;
-	    }
-	    p.undo_action();
-	  }
-	}
-	w->set_opp(nchild, num_of_un, captured_piece_type_opp, array_id_opp);
-      } else {
-	assert(iter % 2 == 0);
-	long long int array_id_opp_e[max_belief_state];
-
-	for(int i = 0; i < num_of_un; i++) {
-	  p.make_posi_n(board_belief, i);
-	  p.make_posi_opponent();
-	  array_id_opp_e[i] = p.getzddnum(zdd_parent_opp);
-	}
-	w->set_opp(num_of_un, array_id_opp_e);
-      }
+      task->set_move_children(legal_move_count, compatible_configuration_count, captured_piece_type, child_results);
     }
     
-    lck.lock();   // lock the mutex to access deq_output
-    deq_output.push_front(w);   // push the task
-    lck.unlock();   // unlock the mutex
-    cv_boss.notify_one();   // wake up the boss if it is waiting
+    if(label == v_unknown || label == v_can_lose) {
+      Posi position;
+      // create the position for a given ID
+      position.make_posi(configuration_id, zdd_parent, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
+      Action actions[max_legal_moves];
+      unsigned char compatible_boards[max_compatible_configurations][36];
+      // enumerate legal moves for the position
+      int legal_move_count = position.compute_actions(actions, iteration);
+      // enumerate all possible third-party configurations for the position
+      int compatible_configuration_count = position.getunknowninfo(compatible_boards);
+      assert(legal_move_count > 0 && legal_move_count < max_legal_moves);
+      assert(compatible_configuration_couont > 0 && compatible_configuration_count <= max_compatible_configurations);
+
+      if(iteration % 2 == 1) {
+	int loss_captured_piece_types[max_compatible_configurations][max_legal_moves] = {};
+	long long int loss_child_results[max_compatible_configurations][max_legal_moves];
+      
+	for(int i = 0; i < compatible_configuration_count; i++) {
+	  for(int j = 0; j < legal_move_count; j++) {
+	    // create a configuration from a third-party perspective
+	    position.make_posi_n(compatible_boards, i);
+	    int move_result = position.make_action(actions[j]);
+	    // the game is not decided directly
+	    if(move_result >= 0) {
+	      position.make_posi_myself();
+	      if(move_result == 0) {
+		loss_child_results[i][j] = position.getzddnum(zdd_parent);
+	      } else if(move_result == 1) {
+		loss_child_results[i][j] = position.getzddnum(zdd_child_after_blue_capture);
+		loss_captured_piece_types[i][j] = 1;
+	      } else {
+		assert(move_result == 2);
+		loss_child_results[i][j] = position.getzddnum(zdd_child_after_red_capture);
+		loss_captured_piece_types[i][j] = 2;
+	      }
+	    } else {
+	      loss_child_results[i][j] = move_result;
+	    }
+	    position.undo_action();
+	  }
+	}
+	task->set_loss_children(legal_move_count, compatible_configuration_count, loss_captured_piece_types, loss_child_results);
+      } else {
+	assert(iteration % 2 == 0);
+	long long int reversed_configuration_ids[max_compatible_configurations];
+
+	for(int i = 0; i < compatible_configuration_count; i++) {
+	  position.make_posi_n(compatible_boards, i);
+	  position.make_posi_opponent();
+	  reversed_configuration_ids[i] = position.getzddnum(zdd_parent_reversed);
+	}
+	task->set_loss_children(compatible_configuration_count, reversed_configuration_ids);
+      }
+    }
+
+    // lock the mutex to access output_queue
+    queue_lock.lock();
+    output_queue.push_front(task);
+    queue_lock.unlock();
+    // wake up the coordinator if it is waiting
+    coordinator_cv.notify_one();
   }
 }
 
 int main(int argc, char *argv[]) {
-  //argv[2~5] : (i, j, k, l)
-  int iteration = atoi(argv[1]);
-  int num_b = atoi(argv[2]), num_r = atoi(argv[3]), num_eb = atoi(argv[4]), num_er = atoi(argv[5]);
-  bool is_opponent = false;
-  if(string(argv[6]) == "e") is_opponent = true;
-  else assert(string(argv[6]) == "s");
-
-  string filename_self = "data/db/" + base[0] + '_' + to_string(num_b) + '-' + to_string(num_r) + '-' + to_string(num_eb) + '-' + to_string(num_er) + ".bin";
-  string filename_enemy = "data/db/" + base[1] + '_' + to_string(num_b) + '-' + to_string(num_r) + '-' + to_string(num_eb) + '-' + to_string(num_er) + ".bin";
-  string filename_self_opp = "data/db/" + base[0] + '_' + to_string(num_eb) + '-' + to_string(num_er) + '-' + to_string(num_b) + '-' + to_string(num_r) + ".bin";
-  string filename_enemy_opp = "data/db/" + base[1] + '_' + to_string(num_eb) + '-' + to_string(num_er) + '-' + to_string(num_b) + '-' + to_string(num_r) + ".bin";
-  string filename_enemy_cap_b = "data/db/" + base[1] + '_' + to_string(num_b) + '-' + to_string(num_r) + '-' + to_string(num_eb - 1) + '-' + to_string(num_er) + ".bin";
-  string filename_enemy_cap_r = "data/db/" + base[1] + '_' + to_string(num_b) + '-' + to_string(num_r) + '-' + to_string(num_eb) + '-' + to_string(num_er - 1) + ".bin";
-  string filename_self_cap_b = "data/db/" + base[0] + '_' + to_string(num_b - 1) + '-' + to_string(num_r) + '-' + to_string(num_eb) + '-' + to_string(num_er) + ".bin";
-  string filename_self_cap_r = "data/db/" + base[0] + '_' + to_string(num_b) + '-' + to_string(num_r - 1) + '-' + to_string(num_eb) + '-' + to_string(num_er) + ".bin";
-  string filename_enemy_opp_cap_b = "data/db/" + base[1] + '_' + to_string(num_eb) + '-' + to_string(num_er) + '-' + to_string(num_b - 1) + '-' + to_string(num_r) + ".bin";
-  string filename_enemy_opp_cap_r = "data/db/" + base[1] + '_' + to_string(num_eb) + '-' + to_string(num_er) + '-' + to_string(num_b) + '-' + to_string(num_r - 1) + ".bin";
-  string filename_self_opp_cap_b = "data/db/" + base[0] + '_' + to_string(num_eb - 1) + '-' + to_string(num_er) + '-' + to_string(num_b) + '-' + to_string(num_r) + ".bin";
-  string filename_self_opp_cap_r = "data/db/" + base[0] + '_' + to_string(num_eb) + '-' + to_string(num_er - 1) + '-' + to_string(num_b) + '-' + to_string(num_r) + ".bin";
-  
-  unsigned long long int placement = placement_count[num_b][num_r][num_eb + num_er];
-  unsigned long long int placement_opp = placement_count[num_eb][num_er][num_b + num_r];
-  unsigned long long int placement_self_cap_b = placement_count[num_b - 1][num_r][num_eb + num_er];
-  unsigned long long int placement_self_cap_r = placement_count[num_b][num_r - 1][num_eb + num_er];
-  unsigned long long int placement_enemy_cap = placement_count[num_b][num_r][num_eb + num_er - 1];
-  unsigned long long int placement_self_opp_cap_b = placement_count[num_eb - 1][num_er][num_b + num_r];
-  unsigned long long int placement_self_opp_cap_r = placement_count[num_eb][num_er - 1][num_b + num_r];
-  unsigned long long int placement_enemy_opp_cap = placement_count[num_eb][num_er][num_b + num_r - 1];
-  
-  unique_ptr<ZDD> zdd = make_unique<ZDD>(num_b, num_r, num_eb + num_er);
-  unique_ptr<ZDD> zdd_opp = make_unique<ZDD>(num_eb, num_er, num_b + num_r);
-  unique_ptr<ZDD> zdd_enemy_cap = make_unique<ZDD>(num_b, num_r, num_eb + num_er - 1);
-  unique_ptr<ZDD> zdd_self_cap_b = make_unique<ZDD>(num_b - 1, num_r, num_eb + num_er);
-  unique_ptr<ZDD> zdd_self_cap_r = make_unique<ZDD>(num_b, num_r - 1, num_eb + num_er);
-  unique_ptr<ZDD> zdd_enemy_opp_cap = make_unique<ZDD>(num_eb, num_er, num_b + num_r - 1);
-  unique_ptr<ZDD> zdd_self_opp_cap_b = make_unique<ZDD>(num_eb - 1, num_er, num_b + num_r);
-  unique_ptr<ZDD> zdd_self_opp_cap_r = make_unique<ZDD>(num_eb, num_er - 1, num_b + num_r);
-
-  int self_iteration, enemy_iteration, self_iteration_opp, enemy_iteration_opp;
-  if(iteration % 2 == 1) {
-    if(string(argv[6]) == "s") {
-      self_iteration = iteration - 2;
-    } else {
-      assert(string(argv[6]) == "e");
-      self_iteration = iteration;
-    }
-    enemy_iteration = iteration - 1;
-    self_iteration_opp = iteration - 2;
-    enemy_iteration_opp = iteration - 1;
-  } else {
-    if(string(argv[6]) == "s") {
-      enemy_iteration = iteration - 2;
-    } else {
-      assert(string(argv[6]) == "e");
-      enemy_iteration = iteration;
-    }
-    self_iteration = iteration - 1;
-    self_iteration_opp = iteration - 1;
-    enemy_iteration_opp = iteration - 2;
+  // forward starts with the given piece counts; reversed starts with self/opponent counts swapped.
+  // The iteration parity determines which player's turn is processed.
+  if(argc == 2 && string(argv[1]) == "--help") {
+    cout << "Usage: " << argv[0]
+	 << " ITERATION SELF_BLUE SELF_RED OPPONENT_BLUE OPPONENT_RED forward|reversed" << endl;
+    cout << "forward: process the given orientation first; reversed: start with swapped piece counts."
+	 << endl;
+    cout << "Legacy aliases: s = forward, e = reversed." << endl;
+    return 0;
+  }
+  if(argc != 7) {
+    cerr << "Expected six arguments. Use --help for usage." << endl;
+    return 1;
+  }
+  const string initial_orientation = argv[6];
+  if(initial_orientation != "forward" && initial_orientation != "reversed"
+     && initial_orientation != "s" && initial_orientation != "e") {
+    cerr << "Invalid orientation: " << initial_orientation
+	 << ". Use forward or reversed (Legacy aliases: s/e)." << endl;
+    return 1;
   }
   
-  Table table_self(self_iteration, filename_self.c_str(), 2, placement);
-  Table table_enemy(enemy_iteration, filename_enemy.c_str(), 2, placement);
-  Table table_self_opp(self_iteration_opp, filename_self_opp.c_str(), 2, placement_opp);
-  Table table_enemy_opp(enemy_iteration_opp, filename_enemy_opp.c_str(), 2, placement_opp);
-  Table table_self_cap_b(0, filename_self_cap_b.c_str(), 2, placement_self_cap_b);
-  Table table_self_cap_r(0, filename_self_cap_r.c_str(), 2, placement_self_cap_r);
-  Table table_enemy_cap_b(0, filename_enemy_cap_b.c_str(), 2, placement_enemy_cap);
-  Table table_enemy_cap_r(0, filename_enemy_cap_r.c_str(), 2, placement_enemy_cap);
-  Table table_self_opp_cap_b(0, filename_self_opp_cap_b.c_str(), 2, placement_self_opp_cap_b);
-  Table table_self_opp_cap_r(0, filename_self_opp_cap_r.c_str(), 2, placement_self_opp_cap_r);
-  Table table_enemy_opp_cap_b(0, filename_enemy_opp_cap_b.c_str(), 2, placement_enemy_opp_cap);
-  Table table_enemy_opp_cap_r(0, filename_enemy_opp_cap_r.c_str(), 2, placement_enemy_opp_cap);
+  int iteration = atoi(argv[1]);
+  int self_blue_count = atoi(argv[2]), self_red_count = atoi(argv[3]), opponent_blue_count = atoi(argv[4]), opponent_red_count = atoi(argv[5]);
+  bool start_with_reversed_orientation = initial_orientation == "reversed" || initial_orientation == "e";
+
+  // self/opponent turn identifies who moves; reversed swaps the piece-count viewpoint.
+  string self_database_path = "data/db/" + table_filename_prefixes[0] + '_' + to_string(self_blue_count) + '-' + to_string(self_red_count) + '-'
+    + to_string(opponent_blue_count) + '-' + to_string(opponent_red_count) + ".bin";
+  string opponent_database_path = "data/db/" + table_filename_prefixes[1] + '_' + to_string(self_blue_count) + '-' + to_string(self_red_count) + '-'
+    + to_string(opponent_blue_count) + '-' + to_string(opponent_red_count) + ".bin";
+  string self_reversed_database_path = "data/db/" + table_filename_prefixes[0] + '_' + to_string(opponent_blue_count) + '-' + to_string(opponent_red_count) + '-'
+    + to_string(self_blue_count) + '-' + to_string(self_red_count) + ".bin";
+  string opponent_reversed_database_path = "data/db/" + table_filename_prefixes[1] + '_' + to_string(opponent_blue_count) + '-' + to_string(opponent_red_count) + '-'
+    + to_string(self_blue_count) + '-' + to_string(self_red_count) + ".bin";
+  string opponent_after_blue_capture_database_path = "data/db/" + table_filename_prefixes[1] + '_' + to_string(self_blue_count) + '-' + to_string(self_red_count) + '-'
+    + to_string(opponent_blue_count - 1) + '-' + to_string(opponent_red_count) + ".bin";
+  string opponent_after_red_capture_database_path = "data/db/" + table_filename_prefixes[1] + '_' + to_string(self_blue_count) + '-' + to_string(self_red_count) + '-'
+    + to_string(opponent_blue_count) + '-' + to_string(opponent_red_count - 1) + ".bin";
+  string self_after_blue_capture_database_path = "data/db/" + table_filename_prefixes[0] + '_' + to_string(self_blue_count - 1) + '-' + to_string(self_red_count) + '-'
+    + to_string(opponent_blue_count) + '-' + to_string(opponent_red_count) + ".bin";
+  string self_after_red_capture_database_path = "data/db/" + table_filename_prefixes[0] + '_' + to_string(self_blue_count) + '-' + to_string(self_red_count - 1) + '-'
+    + to_string(opponent_blue_count) + '-' + to_string(opponent_red_count) + ".bin";
+  string opponent_reversed_after_blue_capture_database_path = "data/db/" + table_filename_prefixes[1] + '_'
+    + to_string(opponent_blue_count) + '-' + to_string(opponent_red_count) + '-' + to_string(self_blue_count - 1) + '-' + to_string(self_red_count) + ".bin";
+  string opponent_reversed_after_red_capture_database_path = "data/db/" + table_filename_prefixes[1] + '_'
+    + to_string(opponent_blue_count) + '-' + to_string(opponent_red_count) + '-' + to_string(self_blue_count) + '-' + to_string(self_red_count - 1) + ".bin";
+  string self_reversed_after_blue_capture_database_path = "data/db/" + table_filename_prefixes[0] + '_'
+    + to_string(opponent_blue_count - 1) + '-' + to_string(opponent_red_count) + '-' + to_string(self_blue_count) + '-' + to_string(self_red_count) + ".bin";
+  string self_reversed_after_red_capture_database_path = "data/db/" + table_filename_prefixes[0] + '_'
+    + to_string(opponent_blue_count) + '-' + to_string(opponent_red_count - 1) + '-' + to_string(self_blue_count) + '-' + to_string(self_red_count) + ".bin";
+  
+  unsigned long long int configuration_count = placement_count[self_blue_count][self_red_count][opponent_blue_count + opponent_red_count];
+  unsigned long long int configuration_count_reversed = placement_count[opponent_blue_count][opponent_red_count][self_blue_count + self_red_count];
+  unsigned long long int configuration_count_self_after_blue_capture = placement_count[self_blue_count - 1][self_red_count][opponent_blue_count + opponent_red_count];
+  unsigned long long int configuration_count_self_after_red_capture = placement_count[self_blue_count][self_red_count - 1][opponent_blue_count + opponent_red_count];
+  unsigned long long int configuration_count_opponent_after_capture = placement_count[self_blue_count][self_red_count][opponent_blue_count + opponent_red_count - 1];
+  unsigned long long int configuration_count_self_reversed_after_blue_capture = placement_count[opponent_blue_count - 1][opponent_red_count][self_blue_count + self_red_count];
+  unsigned long long int configuration_count_self_reversed_after_red_capture = placement_count[opponent_blue_count][opponent_red_count - 1][self_blue_count + self_red_count];
+  unsigned long long int configuration_count_opponent_reversed_after_capture = placement_count[opponent_blue_count][opponent_red_count][self_blue_count + self_red_count - 1];
+  
+  unique_ptr<ZDD> zdd = make_unique<ZDD>(self_blue_count, self_red_count, opponent_blue_count + opponent_red_count);
+  unique_ptr<ZDD> zdd_reversed = make_unique<ZDD>(opponent_blue_count, opponent_red_count, self_blue_count + self_red_count);
+  unique_ptr<ZDD> zdd_opponent_after_capture = make_unique<ZDD>(self_blue_count, self_red_count, opponent_blue_count + opponent_red_count - 1);
+  unique_ptr<ZDD> zdd_self_after_blue_capture = make_unique<ZDD>(self_blue_count - 1, self_red_count, opponent_blue_count + opponent_red_count);
+  unique_ptr<ZDD> zdd_self_after_red_capture = make_unique<ZDD>(self_blue_count, self_red_count - 1, opponent_blue_count + opponent_red_count);
+  unique_ptr<ZDD> zdd_opponent_reversed_after_capture = make_unique<ZDD>(opponent_blue_count, opponent_red_count, self_blue_count + self_red_count - 1);
+  unique_ptr<ZDD> zdd_self_reversed_after_blue_capture = make_unique<ZDD>(opponent_blue_count - 1, opponent_red_count, self_blue_count + self_red_count);
+  unique_ptr<ZDD> zdd_self_reversed_after_red_capture = make_unique<ZDD>(opponent_blue_count, opponent_red_count - 1, self_blue_count + self_red_count);
+
+  int self_turn_iteration, opponent_turn_iteration, self_turn_iteration_reversed, opponent_turn_iteration_reversed;
+  if(iteration % 2 == 1) {
+    if(!start_with_reversed_orientation) {
+      self_turn_iteration = iteration - 2;
+    } else {
+      self_turn_iteration = iteration;
+    }
+    opponent_turn_iteration = iteration - 1;
+    self_turn_iteration_reversed = iteration - 2;
+    opponent_turn_iteration_reversed = iteration - 1;
+  } else {
+    if(!start_with_reversed_orientation) {
+      opponent_turn_iteration = iteration - 2;
+    } else {
+      opponent_turn_iteration = iteration;
+    }
+    self_turn_iteration = iteration - 1;
+    self_turn_iteration_reversed = iteration - 1;
+    opponent_turn_iteration_reversed = iteration - 2;
+  }
+  
+  Table self_turn_table(self_turn_iteration, self_database_path.c_str(), 2, configuration_count);
+  Table opponent_turn_table(opponent_turn_iteration, opponent_database_path.c_str(), 2, configuration_count);
+  Table self_turn_table_reversed(self_turn_iteration_reversed, self_reversed_database_path.c_str(), 2, configuration_count_reversed);
+  Table opponent_turn_table_reversed(opponent_turn_iteration_reversed, opponent_reversed_database_path.c_str(), 2, configuration_count_reversed);
+  Table self_turn_table_after_blue_capture(0, self_after_blue_capture_database_path.c_str(), 2, configuration_count_self_after_blue_capture);
+  Table self_turn_table_after_red_capture(0, self_after_red_capture_database_path.c_str(), 2, configuration_count_self_after_red_capture);
+  Table opponent_turn_table_after_blue_capture(0, opponent_after_blue_capture_database_path.c_str(), 2, configuration_count_opponent_after_capture);
+  Table opponent_turn_table_after_red_capture(0, opponent_after_red_capture_database_path.c_str(), 2, configuration_count_opponent_after_capture);
+  Table self_turn_table_reversed_after_blue_capture(0, self_reversed_after_blue_capture_database_path.c_str(), 2, configuration_count_self_reversed_after_blue_capture);
+  Table self_turn_table_reversed_after_red_capture(0, self_reversed_after_red_capture_database_path.c_str(), 2, configuration_count_self_reversed_after_red_capture);
+  Table opponent_turn_table_reversed_after_blue_capture(0, opponent_reversed_after_blue_capture_database_path.c_str(), 2, configuration_count_opponent_reversed_after_capture);
+  Table opponent_turn_table_reversed_after_red_capture(0, opponent_reversed_after_red_capture_database_path.c_str(), 2, configuration_count_opponent_reversed_after_capture);
     
   while(true) {
-    if(num_b == num_eb && num_r == num_er) {
-      std::cout << "iter > " << iteration << ": (" << num_b << ", " << num_r << ", " << num_eb << ", " << num_er << ")" << endl;
+    if(self_blue_count == opponent_blue_count && self_red_count == opponent_red_count) {
+      cout << "[analysis] iteration: " << iteration << ", pieces (self blue, self red, opponent blue, opponent red): ("
+	   << self_blue_count << ", " << self_red_count << ", " << opponent_blue_count << ", " << opponent_red_count << ")" << endl;
       
-      // flag indicating whether the worker has finished its work
-      // always set to false before creating the boss
-      flag_worker_quit = false;
+      // Reset the shutdown flag before starting this pass.
+      shutdown_requested = false;
       
       if(iteration % 2 == 1) {
-	thread th_boss(boss, iteration, num_b, num_r, num_eb, num_er,
-		       ref(table_self), filename_self.c_str(),
-		       cref(table_enemy), cref(table_enemy_cap_b), cref(table_enemy_cap_r),
-		       cref(table_enemy));   // create the boss thread
+	thread coordinator_thread(run_coordinator, iteration, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count,
+				  ref(self_turn_table), self_database_path.c_str(),
+				  cref(opponent_turn_table), cref(opponent_turn_table_after_blue_capture), cref(opponent_turn_table_after_red_capture),
+				  cref(opponent_turn_table));
 	
-	thread th_worker[nworker];   // create the worker threads
-	for(int workerid = 0; workerid < nworker; workerid++){
-	  th_worker[workerid] = thread(worker, iteration, num_b, num_r, num_eb, num_er,
-				       cref(*zdd), cref(*zdd_enemy_cap), cref(*zdd_enemy_cap),
-				       cref(*zdd));
+	thread worker_threads[worker_count];
+	for(int worker_index = 0; worker_index < worker_count; worker_index++){
+	  worker_threads[worker_index] = thread(run_worker, iteration, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count,
+						cref(*zdd), cref(*zdd_opponent_after_capture), cref(*zdd_opponent_after_capture),
+						cref(*zdd));
 	}
 	
-	// cleanup
-	th_boss.join(); 
-	for(int workerid = 0; workerid < nworker; workerid++){
-	  th_worker[workerid].join();
+	// Wait for the coordinator and all workers to finish this pass.
+	coordinator_thread.join(); 
+	for(int worker_index = 0; worker_index < worker_count; worker_index++){
+	  worker_threads[worker_index].join();
 	}
       } else {
-	thread th_boss(boss, iteration, num_b, num_r, num_eb, num_er,
-		       ref(table_enemy), filename_enemy.c_str(),
-		       cref(table_self), cref(table_self_cap_b), cref(table_self_cap_r),
-		       cref(table_self));   // create the boss thread
+	thread coordinator_thread(run_coordinator, iteration, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count,
+				  ref(opponent_turn_table), opponent_database_path.c_str(),
+				  cref(self_turn_table), cref(self_turn_table_after_blue_capture), cref(self_turn_table_after_red_capture),
+				  cref(self_turn_table));
 	
-	thread th_worker[nworker];   // create the worker threads
-	for(int workerid = 0; workerid < nworker; workerid++) {
-	  th_worker[workerid] = thread(worker, iteration, num_b, num_r, num_eb, num_er,
-				       cref(*zdd), cref(*zdd_self_cap_b), cref(*zdd_self_cap_r),
-				       cref(*zdd));
+	thread worker_threads[worker_count];
+	for(int worker_index = 0; worker_index < worker_count; worker_index++) {
+	  worker_threads[worker_index] = thread(run_worker, iteration, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count,
+						cref(*zdd), cref(*zdd_self_after_blue_capture), cref(*zdd_self_after_red_capture),
+						cref(*zdd));
 	}
 	
-	// cleanup
-	th_boss.join(); 
-	for(int workerid = 0; workerid < nworker; workerid++){
-	  th_worker[workerid].join();
+	// Wait for the coordinator and all workers to finish this pass.
+	coordinator_thread.join(); 
+	for(int worker_index = 0; worker_index < worker_count; worker_index++){
+	  worker_threads[worker_index].join();
 	}
       }
       
-      if(count_changes == 0) {
-	cout << "analysis finished" << endl;
+      if(label_update_count == 0) {
+	cout << "[analysis] Finished: no label updates" << endl;
 	break;
       }
     } else {
-      assert(num_b != num_eb || num_r != num_er);
+      assert(self_blue_count != opponent_blue_count || self_red_count != opponent_red_count);
 
-      if(!is_opponent) {
-	// First, process (num_b, num_r, num_eb, num_er)
-	std::cout << "iter > " << iteration << ": (" << num_b << ", " << num_r << ", " << num_eb << ", " << num_er << ")" << endl;
+      if(!start_with_reversed_orientation) {
+	// First, process (self_blue_count, self_red_count, opponent_blue_count, opponent_red_count)
+	cout << "[analysis] iteration: " << iteration << ", pieces (self blue, self red, opponent blue, opponent red): ("
+	     << self_blue_count << ", " << self_red_count << ", " << opponent_blue_count << ", " << opponent_red_count << ")" << endl;
 	
-	// flag indicating whether the worker has finished its work
-	// always set to false before creating the boss
-	flag_worker_quit = false;
+	// Reset the shutdown flag before starting this pass.
+	shutdown_requested = false;
 	
 	if(iteration % 2 == 1) {
-	  thread th_boss(boss, iteration, num_b, num_r, num_eb, num_er,
-			 ref(table_self), filename_self.c_str(),
-			 cref(table_enemy), cref(table_enemy_cap_b), cref(table_enemy_cap_r),
-			 cref(table_enemy_opp));   // create the boss thread
+	  thread coordinator_thread(run_coordinator, iteration, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count,
+				    ref(self_turn_table), self_database_path.c_str(),
+				    cref(opponent_turn_table), cref(opponent_turn_table_after_blue_capture), cref(opponent_turn_table_after_red_capture),
+				    cref(opponent_turn_table_reversed));
 	  
-	  thread th_worker[nworker];   // create the worker threads
-	  for(int workerid = 0; workerid < nworker; workerid++){
-	    th_worker[workerid] = thread(worker, iteration, num_b, num_r, num_eb, num_er,
-					 cref(*zdd), cref(*zdd_enemy_cap), cref(*zdd_enemy_cap),
-					 cref(*zdd_opp));   //ここでworker()を呼び出す
+	  thread worker_threads[worker_count];
+	  for(int worker_index = 0; worker_index < worker_count; worker_index++){
+	    worker_threads[worker_index] = thread(run_worker, iteration, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count,
+						  cref(*zdd), cref(*zdd_opponent_after_capture), cref(*zdd_opponent_after_capture),
+						  cref(*zdd_reversed));
 	  }
 	  
-	  // cleanup
-	  th_boss.join(); 
-	  for(int workerid = 0; workerid < nworker; workerid++){
-	    th_worker[workerid].join();
+	  // Wait for the coordinator and all workers to finish this pass.
+	  coordinator_thread.join(); 
+	  for(int worker_index = 0; worker_index < worker_count; worker_index++){
+	    worker_threads[worker_index].join();
 	  }
 	} else {
-	  thread th_boss(boss, iteration, num_b, num_r, num_eb, num_er,
-			 ref(table_enemy), filename_enemy.c_str(),
-			 cref(table_self), cref(table_self_cap_b), cref(table_self_cap_r),
-			 cref(table_self_opp));   // create the boss thread
+	  thread coordinator_thread(run_coordinator, iteration, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count,
+				    ref(opponent_turn_table), opponent_database_path.c_str(),
+				    cref(self_turn_table), cref(self_turn_table_after_blue_capture), cref(self_turn_table_after_red_capture),
+				    cref(self_turn_table_reversed));
 	  
-	  thread th_worker[nworker];   // create the worker threads
-	  for(int workerid = 0; workerid < nworker; workerid++) {
-	    th_worker[workerid] = thread(worker, iteration, num_b, num_r, num_eb, num_er,
-					 cref(*zdd), cref(*zdd_self_cap_b), cref(*zdd_self_cap_r),
-					 cref(*zdd_opp));
+	  thread worker_threads[worker_count];
+	  for(int worker_index = 0; worker_index < worker_count; worker_index++) {
+	    worker_threads[worker_index] = thread(run_worker, iteration, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count,
+						  cref(*zdd), cref(*zdd_self_after_blue_capture), cref(*zdd_self_after_red_capture),
+						  cref(*zdd_reversed));
 	  }
 	
-	  // cleanup
-	  th_boss.join(); 
-	  for(int workerid = 0; workerid < nworker; workerid++){
-	    th_worker[workerid].join();
+	  // Wait for the coordinator and all workers to finish this pass.
+	  coordinator_thread.join(); 
+	  for(int worker_index = 0; worker_index < worker_count; worker_index++){
+	    worker_threads[worker_index].join();
 	  }
 	}
       }
 
-      // Next, process (num_eb, num_er, num_b, num_r)
-      std::cout << "iter > " << iteration << ": (" << num_eb << ", " << num_er << ", " << num_b << ", " << num_r << ")" << endl;
-      int count_changes_copy = count_changes;
+      // Next, process (opponent_blue_count, opponent_red_count, self_blue_count, self_red_count)
+      cout << "[analysis] iteration: " << iteration << ", pieces (self blue, self red, opponent blue, opponent red): ("
+	   << opponent_blue_count << ", " << opponent_red_count << ", " << self_blue_count << ", " << self_red_count << ")" << endl;
+      int forward_label_update_count = label_update_count;
       
-      // flag indicating whether the worker has finished its work
-      // always set to false before creating the boss
-      flag_worker_quit = false;
+      // Reset the shutdown flag before starting this pass.
+      shutdown_requested = false;
       
       if(iteration % 2 == 1) {
-	thread th_boss(boss, iteration, num_eb, num_er, num_b, num_r,
-		       ref(table_self_opp), filename_self_opp.c_str(),
-		       cref(table_enemy_opp), cref(table_enemy_opp_cap_b), cref(table_enemy_opp_cap_r),
-		       cref(table_enemy));   // create the boss thread
+	thread coordinator_thread(run_coordinator, iteration, opponent_blue_count, opponent_red_count, self_blue_count, self_red_count,
+				  ref(self_turn_table_reversed), self_reversed_database_path.c_str(),
+				  cref(opponent_turn_table_reversed), cref(opponent_turn_table_reversed_after_blue_capture), cref(opponent_turn_table_reversed_after_red_capture),
+				  cref(opponent_turn_table));
 	
-	thread th_worker[nworker];   // create the worker threads
-	for(int workerid = 0; workerid < nworker; workerid++){
-	  th_worker[workerid] = thread(worker, iteration, num_eb, num_er, num_b, num_r,
-				       cref(*zdd_opp), cref(*zdd_enemy_opp_cap), cref(*zdd_enemy_opp_cap),
-				       cref(*zdd));   //ここでworker()を呼び出す
+	thread worker_threads[worker_count];
+	for(int worker_index = 0; worker_index < worker_count; worker_index++){
+	  worker_threads[worker_index] = thread(run_worker, iteration, opponent_blue_count, opponent_red_count, self_blue_count, self_red_count,
+						cref(*zdd_reversed), cref(*zdd_opponent_reversed_after_capture), cref(*zdd_opponent_reversed_after_capture),
+						cref(*zdd));
 	}
 	
-	// cleanup
-	th_boss.join(); 
-	for(int workerid = 0; workerid < nworker; workerid++){
-	  th_worker[workerid].join();
+	// Wait for the coordinator and all workers to finish this pass.
+	coordinator_thread.join(); 
+	for(int worker_index = 0; worker_index < worker_count; worker_index++){
+	  worker_threads[worker_index].join();
 	}
       } else {
-	thread th_boss(boss, iteration, num_eb, num_er, num_b, num_r,
-		       ref(table_enemy_opp), filename_enemy_opp.c_str(),
-		       cref(table_self_opp), cref(table_self_opp_cap_b), cref(table_self_opp_cap_r),
-		       cref(table_self));   // create the boss thread
+	thread coordinator_thread(run_coordinator, iteration, opponent_blue_count, opponent_red_count, self_blue_count, self_red_count,
+				  ref(opponent_turn_table_reversed), opponent_reversed_database_path.c_str(),
+				  cref(self_turn_table_reversed), cref(self_turn_table_reversed_after_blue_capture), cref(self_turn_table_reversed_after_red_capture),
+				  cref(self_turn_table));
 	
-	thread th_worker[nworker];   // create tge worker threads
-	for(int workerid = 0; workerid < nworker; workerid++) {
-	  th_worker[workerid] = thread(worker, iteration, num_eb, num_er, num_b, num_r,
-				       cref(*zdd_opp), cref(*zdd_self_opp_cap_b), cref(*zdd_self_opp_cap_r),
-				       cref(*zdd));
+	thread worker_threads[worker_count];
+	for(int worker_index = 0; worker_index < worker_count; worker_index++) {
+	  worker_threads[worker_index] = thread(run_worker, iteration, opponent_blue_count, opponent_red_count, self_blue_count, self_red_count,
+						cref(*zdd_reversed), cref(*zdd_self_reversed_after_blue_capture), cref(*zdd_self_reversed_after_red_capture),
+						cref(*zdd));
 	}
 	
-	// cleanup
-	th_boss.join(); 
-	for(int workerid = 0; workerid < nworker; workerid++){
-	  th_worker[workerid].join();
+	// Wait for the coordinator and all workers to finish this pass.
+	coordinator_thread.join(); 
+	for(int worker_index = 0; worker_index < worker_count; worker_index++){
+	  worker_threads[worker_index].join();
 	}
       }
       
-      if(count_changes == 0 && count_changes_copy == 0) {
-	cout << "analysis finished" << endl;
+      if(label_update_count == 0 && forward_label_update_count == 0) {
+	cout << "[analysis] Finished: no label updates" << endl;
 	break;
       }
-
-      is_opponent = false;
+      start_with_reversed_orientation = false;
     }
     iteration++;
   }
-
   return 0;
 }
-  
-// g++ -std=c++14 -O2 -Wall -pthread src/analysis/main.cpp src/common/node.cpp src/common/zdd_geister.cpp src/common/posi_geister.cpp src/common/table.cpp -o bin/main 2>&1 
-// ./bin/main 1 1 1 1 1 s 2>&1 &
 
-
-// make
-// ./scripts/run_main.sh &
+// Build: loss_count bin/main
+// Example: ./bin/main 1 1 1 1 1 forward
+// Batch execution: ./scripts/run_main.sh

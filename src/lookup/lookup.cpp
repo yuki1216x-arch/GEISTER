@@ -1,3 +1,4 @@
+// Look up a Geister configuration ID and label from a FEN-style board string.
 #include <memory>
 #include <chrono>
 #include <random>
@@ -16,19 +17,20 @@ using std::uniform_int_distribution;
 using std::chrono::high_resolution_clock;
 using std::to_string;
 
-std::vector<string> split(const string text, const char delimiter='/') {
-  std::vector<string> columns;
+// Split the board string into delimiter-separated fields.
+std::vector<string> split_fields(const string text, const char delimiter='/') {
+  std::vector<string> fields;
 
   if (text.empty()) {
-    return columns;
+    return fields;
   }
 
   std::stringstream stream{text};
-  string buff;
-  while (getline(stream, buff, delimiter)) {
-    columns.push_back(buff);
+  string field;
+  while (getline(stream, field, delimiter)) {
+    fields.push_back(field);
   }
-  return columns;
+  return fields;
 }
 
 constexpr unsigned long long int placement_count[5][5][9] {
@@ -59,80 +61,97 @@ constexpr unsigned long long int placement_count[5][5][9] {
     , {0ULL, 0ULL, 800688596400ULL, 6939301168800ULL, 43370632305000ULL, 208179035064000ULL, 798019634412000ULL, 2508061708152000ULL, 6583661983899000ULL} }
 };
 
-const string base[2] = {"self_table", "enemy_table"};
+const string table_filename_prefixes[2] = {"self_table", "enemy_table"};
 
-unsigned long long int getzddnum(const ZDD& zdd, string fen_str) noexcept {
-  unsigned char array_objid[36] = {};
-  std::vector<string> cols = split(fen_str);
-  int square_id = 35;
-  assert(cols.size() == 6);
+// Decode six board rows, then map the board to its ZDD configuration ID.
+unsigned long long int get_zdd_id_from_fen(const ZDD& zdd, string fen_text) noexcept {
+  unsigned char board_object_ids[36] = {};
+  std::vector<string> rows = split_fields(fen_text);
+  int square_id = 35;   // decode squares in descending order
+  assert(rows.size() == 6);
 
-  for (std::size_t i = 0; i < cols.size(); i++) {
-    for (std::size_t j = 0; j < cols[i].size(); j++) {
+  for(std::size_t i = 0; i < rows.size(); i++) {
+    for(std::size_t j = 0; j < rows[i].size(); j++) {
       assert(i >= 0 && i <= 5);
-      if (cols[i][j] != tbl_objid2locinfo[1].piece_ch && cols[i][j] != tbl_objid2locinfo[2].piece_ch && cols[i][j] != tbl_objid2locinfo[3].piece_ch) {
-	assert(cols[i][j] - '0' >= 1 && cols[i][j] - '0' <= square_id % 6 + 1);
-	for (int k = cols[i][j] - '0'; k > 0; k--) {
-	  array_objid[square_id] = 0;
+      if(rows[i][j] != tbl_objid2locinfo[1].piece_ch && rows[i][j] != tbl_objid2locinfo[2].piece_ch && rows[i][j] != tbl_objid2locinfo[3].piece_ch) {
+	assert(rows[i][j] - '0' >= 1 && rows[i][j] - '0' <= square_id % 6 + 1);
+	for(int k = rows[i][j] - '0'; k > 0; k--) {
+	  board_object_ids[square_id] = 0;
 	  square_id--;
 	}
       } else {
-	if (cols[i][j] == tbl_objid2locinfo[1].piece_ch) array_objid[square_id] = 1;
-	else if (cols[i][j] == tbl_objid2locinfo[2].piece_ch) array_objid[square_id] = 2;
+	if (rows[i][j] == tbl_objid2locinfo[1].piece_ch) board_object_ids[square_id] = 1;
+	else if (rows[i][j] == tbl_objid2locinfo[2].piece_ch) board_object_ids[square_id] = 2;
 	else {
-	  assert(cols[i][j] == tbl_objid2locinfo[3].piece_ch);
-	  array_objid[square_id] = 3;
+	  assert(rows[i][j] == tbl_objid2locinfo[3].piece_ch);
+	  board_object_ids[square_id] = 3;
 	}
 	square_id--;
       }
     }
   }
   assert(square_id == -1);
-  return zdd.compute_id(array_objid, 36);
+  return zdd.compute_id(board_object_ids, 36);
 }
 
-//---.exe iter read_file write_file
 int main(int argc, char *argv[]) {
-  int player_to_move = atoi(argv[1]); // player to move
-  int num_b = atoi(argv[2]), num_r = atoi(argv[3]), num_eb = atoi(argv[4]), num_er = atoi(argv[5]); //
-  string base_filename = base[player_to_move - 1];
-  string read_filename_str = "data/db/" + base_filename + '_' + to_string(num_b) + '-' + to_string(num_r) + '-' + to_string(num_eb) + '-' + to_string(num_er) + ".bin";
-  
-  unique_ptr<ZDD> zdd_check = make_unique<ZDD>(num_b, num_r, num_eb + num_er);
-  Posi p;
-
-  unsigned long long int position_id = getzddnum(*zdd_check, argv[6]);
-  unsigned long long int seek_id = (position_id / 2) + 8;
-
-  std::cout << "id of this configuration：" << position_id << endl;
-
-  p.make_posi(position_id, *zdd_check, num_b, num_r, num_eb, num_er);
-  p.print();
-
-  std::ifstream file(read_filename_str, std::ios::binary);
-  if (!file) {
-    std::cerr << "Failed to open the file\n";
+  if(argc == 2 && string(argv[1]) == "--help") {
+    cout << "Usage: " << argv[0]
+	 << " PLAYER_TO_MOVE SELF_BLUE SELF_RED OPPONENT_BLUE OPPONENT_RED BOARD" << endl;
+    cout << "PLAYER_TO_MOVE: 1 = self, 2 = opponent. BOARD contains six slash-separated rows." << endl;
+    return 0;
+  }
+  if(argc != 7) {
+    cerr << "[error] Expected six arguments. Use --help for usage." << endl;
+    return 1;
+  }
+  if(string(argv[1]) != "1" && string(argv[1]) != "2") {
+    cerr << "[error] PLAYER_TO_MOVE must be 1 (self) or 2 (opponent)." << endl;
     return 1;
   }
   
-  file.seekg(static_cast<std::streamoff>(seek_id)); // ← byte offset to read (0-based)
+  int player_to_move = atoi(argv[1]);
+  int self_blue_count = atoi(argv[2]), self_red_count = atoi(argv[3]), opponent_blue_count = atoi(argv[4]), opponent_red_count = atoi(argv[5]);
+  string table_filename_prefix = table_filename_prefixes[player_to_move - 1];
+  string database_path = "data/db/" + table_filename_prefix + '_' + to_string(self_blue_count) + '-' + to_string(self_red_count) + '-' + to_string(opponent_blue_count) + '-' + to_string(opponent_red_count) + ".bin";
+  
+  unique_ptr<ZDD> zdd = make_unique<ZDD>(self_blue_count, self_red_count, opponent_blue_count + opponent_red_count);
+  Posi position;
 
-  char byte;
-  file.read(&byte, 1);
+  unsigned long long int configuration_id = get_zdd_id_from_fen(*zdd, argv[6]);
+  // Preserve the existing reader: an 8-byte header followed by two 4-bit entries per byte.
+  unsigned long long int entry_byte_offset = (configuration_id / 2) + 8;
 
-  if(position_id % 2 == 1) byte = byte >> 4U;
-  unsigned int val = byte & 15U;
+  cout << "[lookup] configuration_id：" << configuration_id << endl;
 
-  file.close();
+  position.make_posi(configuration_id, *zdd, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
+  position.print();
 
-  std::cout << "label index = " << val;
+  std::ifstream database_file(database_path, std::ios::binary);
+  if (!database_file) {
+    cerr << "[error] Failed to open database: " << database_path << endl;
+    return 1;
+  }
+  
+  database_file.seekg(static_cast<std::streamoff>(entry_byte_offset));
 
-  if (val == v_unknown) std::cout << ", label: unknown" << endl;
-  else if (val == v_win) std::cout << ", label：win" << endl;
-  else if (val == v_lose) std::cout << ", label：lose" << endl;
+  char packed_labels;
+  database_file.read(&packed_labels, 1);
+
+  // Odd IDs use the upper nibble; even IDs use the lower nibble.
+  if(configuration_id % 2 == 1) packed_labels = packed_labels >> 4U;
+  unsigned int label_code = packed_labels & 15U;
+
+  database_file.close();
+
+  cout << "[lookup] label_code: " << label_code;
+
+  if(label_code == v_unknown) cout << ", label: unknown" << endl;
+  else if(label_code == v_win) cout << ", label: forced win (FW)" << endl;
+  else if(label_code == v_lose) cout << ", label: forced loss (FL)" << endl;
   else {
-    assert(val == v_can_lose || val == 5);
-    std::cout << ", label：can lose" << endl;
+    assert(label_code == v_can_lose || label_code == 5);
+    std::cout << ", label：can lose (CL)" << endl;
   }
 
   return 0;
