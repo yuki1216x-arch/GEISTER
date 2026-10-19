@@ -555,7 +555,7 @@ static void run_worker(int iteration, int self_blue_count, int self_red_count, i
       // enumerate all possible third-party configurations for the position
       int compatible_configuration_count = position.getunknowninfo(compatible_boards);
       assert(legal_move_count > 0 && legal_move_count < max_legal_moves);
-      assert(compatible_configuration_couont > 0 && compatible_configuration_count <= max_compatible_configurations);
+      assert(compatible_configuration_count > 0 && compatible_configuration_count <= max_compatible_configurations);
 
       if(iteration % 2 == 1) {
 	int loss_captured_piece_types[max_compatible_configurations][max_legal_moves] = {};

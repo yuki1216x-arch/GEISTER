@@ -232,14 +232,14 @@ int main(int argc, char *argv[]) {
   cout << "[validation] ZDD checks passed, pieces (self blue, self red, opponent blue, opponent red): (" << self_blue_count << "," << self_red_count << "," << opponent_blue_count << "," << opponent_red_count << ")" << endl;
 
   // Preserve the existing four-bit database reader.
-  Table self_turn_table(0, self_database_path.c_str(), 4, configuration_count);
-  Table opponent_turn_table(0, opponent_database_path.c_str(), 4, configuration_count);
-  Table self_turn_table_reversed(0, self_reversed_database_path.c_str(), 4, configuration_count_reversed);
-  Table opponent_turn_table_reversed(0, opponent_reversed_database_path.c_str(), 4, configuration_count_reversed);
-  Table self_turn_table_after_blue_capture(0, self_after_blue_capture_database_path.c_str(), 4, configuration_count_self_after_blue_capture);
-  Table self_turn_table_after_red_capture(0, self_after_red_capture_database_path.c_str(), 4, configuration_count_self_after_red_capture);
-  Table opponent_turn_table_after_blue_capture(0, opponent_after_blue_capture_database_path.c_str(), 4, configuration_count_opponent_after_capture);
-  Table opponent_turn_table_after_red_capture(0, opponent_after_red_capture_database_path.c_str(), 4, configuration_count_opponent_after_capture);
+  Table self_turn_table(0, self_database_path.c_str(), 2, configuration_count);
+  Table opponent_turn_table(0, opponent_database_path.c_str(), 2, configuration_count);
+  Table self_turn_table_reversed(0, self_reversed_database_path.c_str(), 2, configuration_count_reversed);
+  Table opponent_turn_table_reversed(0, opponent_reversed_database_path.c_str(), 2, configuration_count_reversed);
+  Table self_turn_table_after_blue_capture(0, self_after_blue_capture_database_path.c_str(), 2, configuration_count_self_after_blue_capture);
+  Table self_turn_table_after_red_capture(0, self_after_red_capture_database_path.c_str(), 2, configuration_count_self_after_red_capture);
+  Table opponent_turn_table_after_blue_capture(0, opponent_after_blue_capture_database_path.c_str(), 2, configuration_count_opponent_after_capture);
+  Table opponent_turn_table_after_red_capture(0, opponent_after_red_capture_database_path.c_str(), 2, configuration_count_opponent_after_capture);
   
   Posi position;
   bool validation_failed = false;
@@ -330,7 +330,7 @@ int main(int argc, char *argv[]) {
 	      if(j != legal_move_count - 1) cerr << " ";
 	    }
 	  } else {
-	    for(int m = 0; m < legal_move_count; m++) {
+	    for(int m = 0; m < compatible_configuration_count; m++) {
 	      cout << reversed_view_labels[m];
 	    }
 	  }

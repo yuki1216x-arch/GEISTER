@@ -86,20 +86,25 @@ int main(int argc, char *argv[]) {
   }
 
   for(int sample_index = 0; sample_index < 100; sample_index++) {
-    // Preserve the existing reader: skip 1 byte, then read two 4-bit entries per byte.
-    unsigned long long int entry_byte_offset = (sampled_configuration_ids[sample_index] / 2) + 1;
+    unsigned long long int configuration_id = sampled_configuration_ids[sample_index];
+    
+    // Skip the 8-byte header; each byte stores four 2-bit entries.
+    unsigned long long int entry_byte_offset = 8 + configuration_id / 4;
     database_file.seekg(static_cast<std::streamoff>(entry_byte_offset));
 
     char packed_labels;
-    database_file.read(&packed_labels, 1);
+    if(!database_file.read(&packed_labels, 1)) {
+      cerr << "[error] Failed to read database: " << database_path
+	   << ", configuration_id: " << configuration_id << endl;
+      return 1;
+    }
 
-    // Odd IDs use the upper nibble; even IDs use the lower nibble.
-    if(sampled_configuration_ids[sample_index] % 2 == 1) packed_labels = packed_labels >> 4U;
-    unsigned int label_code = packed_labels & 15U;
+    // Extract the 2-bit label; entries are packed from the least significant bits.
+    unsigned int label_code = (static_cast<unsigned char>(packed_labels) >> (2U * (configuration_id % 4))) & 3U;
     
-    cout << "[lookup] configuration_id: " << sampled_configuration_ids[sample_index] << endl;
+    cout << "[lookup] configuration_id: " << configuration_id << endl;
 
-    position.make_posi(sampled_configuration_ids[sample_index], *zdd, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
+    position.make_posi(configuration_id, *zdd, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
     position.print();
     
     cout << "[lookup] label_code: " << label_code;
@@ -107,9 +112,10 @@ int main(int argc, char *argv[]) {
     if(label_code == v_unknown) cout << ", label: unknown" << endl;
     else if(label_code == v_win) cout << ", label: forced win (FW)" << endl;
     else if(label_code == v_lose) cout << ", label: forced loss (FL)" << endl;
+    else if(label_code == v_can_lose) cout << ", label：can lose (CL)" << endl;
     else {
-      assert(label_code == v_can_lose || label_code == 5);
-      cout << ", label：can lose (CL)" << endl;
+      cerr << "\n[error] Invalid label code: " << label_code << endl;
+      return 1;
     }
   }
 

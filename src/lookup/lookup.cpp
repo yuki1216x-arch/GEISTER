@@ -119,8 +119,8 @@ int main(int argc, char *argv[]) {
   Posi position;
 
   unsigned long long int configuration_id = get_zdd_id_from_fen(*zdd, argv[6]);
-  // Preserve the existing reader: an 8-byte header followed by two 4-bit entries per byte.
-  unsigned long long int entry_byte_offset = (configuration_id / 2) + 8;
+  // Skip the 8-byte header; each byte stores four 2-bit entries.
+  unsigned long long int entry_byte_offset = 8 + configuration_id / 4;
 
   cout << "[lookup] configuration_id：" << configuration_id << endl;
 
@@ -138,9 +138,8 @@ int main(int argc, char *argv[]) {
   char packed_labels;
   database_file.read(&packed_labels, 1);
 
-  // Odd IDs use the upper nibble; even IDs use the lower nibble.
-  if(configuration_id % 2 == 1) packed_labels = packed_labels >> 4U;
-  unsigned int label_code = packed_labels & 15U;
+  // Extract the 2-bit label; entries are packed from the least significant bits.
+  unsigned int label_code = (static_cast<unsigned char>(packed_labels) >> (2U * (configuration_id % 4))) & 3U;
 
   database_file.close();
 
