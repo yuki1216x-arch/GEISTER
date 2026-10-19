@@ -231,22 +231,30 @@ int main(int argc, char *argv[]) {
 
   cout << "[validation] ZDD checks passed, pieces (self blue, self red, opponent blue, opponent red): (" << self_blue_count << "," << self_red_count << "," << opponent_blue_count << "," << opponent_red_count << ")" << endl;
 
-  const string required_database_paths[] = {
-					   self_database_path,
-					   opponent_database_path,
-					   self_reversed_database_path,
-					   opponent_reversed_database_path,
-					   self_after_blue_capture_database_path,
-					   self_after_red_capture_database_path,
-					   opponent_after_blue_capture_database_path,
-					   opponent_after_red_capture_database_path
+  struct DatabaseRequirement {
+    string path;
+    bool required;
   };
 
-  for(const string& database_path : required_database_paths) {
-    std::ifstream database_file(database_path, std::ios::binary);
+  // Capture databases are needed only when the captured color still has pieces remaining.
+  const DatabaseRequirement database_requirements[] = {
+					    {self_database_path, true},
+					    {opponent_database_path, true},
+					    {self_reversed_database_path, true},
+					    {opponent_reversed_database_path, true},
+					    {self_after_blue_capture_database_path, self_blue_count > 1},
+					    {self_after_red_capture_database_path, self_red_count > 1},
+					    {opponent_after_blue_capture_database_path, opponent_blue_count > 1},
+					    {opponent_after_red_capture_database_path, opponent_red_count > 1}
+  };
+
+  for(const DatabaseRequirement& database : database_requirements) {
+    if(!database.required) continue;
+    
+    std::ifstream database_file(database.path, std::ios::binary);
     if(!database_file) {
       cerr << "[error] Failed to open required database: "
-	   << database_path << endl;
+	   << database.path << endl;
       return 1;
     }
   }
