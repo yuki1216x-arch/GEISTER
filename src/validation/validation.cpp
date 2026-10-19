@@ -231,7 +231,27 @@ int main(int argc, char *argv[]) {
 
   cout << "[validation] ZDD checks passed, pieces (self blue, self red, opponent blue, opponent red): (" << self_blue_count << "," << self_red_count << "," << opponent_blue_count << "," << opponent_red_count << ")" << endl;
 
-  // Preserve the existing four-bit database reader.
+  const string required_database_paths[] = {
+					   self_database_path,
+					   opponent_database_path,
+					   self_reversed_database_path,
+					   opponent_reversed_database_path,
+					   self_after_blue_capture_database_path,
+					   self_after_red_capture_database_path,
+					   opponent_after_blue_capture_database_path,
+					   opponent_after_red_capture_database_path
+  };
+
+  for(const string& database_path : required_database_paths) {
+    std::ifstream database_file(database_path, std::ios::binary);
+    if(!database_file) {
+      cerr << "[error] Failed to open required database: "
+	   << database_path << endl;
+      return 1;
+    }
+  }
+
+  // Read databases containing 2-bit label entries.
   Table self_turn_table(0, self_database_path.c_str(), 2, configuration_count);
   Table opponent_turn_table(0, opponent_database_path.c_str(), 2, configuration_count);
   Table self_turn_table_reversed(0, self_reversed_database_path.c_str(), 2, configuration_count_reversed);

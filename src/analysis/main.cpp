@@ -870,6 +870,6 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
-// Build: loss_count bin/main
+// Build: make bin/main
 // Example: ./bin/main 1 1 1 1 1 forward
 // Batch execution: ./scripts/run_main.sh

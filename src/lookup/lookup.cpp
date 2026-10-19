@@ -136,7 +136,11 @@ int main(int argc, char *argv[]) {
   database_file.seekg(static_cast<std::streamoff>(entry_byte_offset));
 
   char packed_labels;
-  database_file.read(&packed_labels, 1);
+  if(!database_file.read(&packed_labels, 1)) {
+    cerr << "[error] Failed to read database: " << database_path
+	 << ", configuration_id: " << configuration_id << endl;
+    return 1;
+  }
 
   // Extract the 2-bit label; entries are packed from the least significant bits.
   unsigned int label_code = (static_cast<unsigned char>(packed_labels) >> (2U * (configuration_id % 4))) & 3U;
