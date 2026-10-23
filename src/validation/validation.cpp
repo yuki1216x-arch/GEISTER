@@ -83,7 +83,7 @@ void verify_zdd_enumeration(Node& current_node, vector<unsigned char>& board_obj
 
   for(int x = 0; x < 2; x++) {
     // Skip branches leading to the zero terminal.
-    if(current_node.IsNextLeaf0(depth, x, self_blue_count, self_red_count, opponent_blue_count + opponent_red_count)) {
+    if(current_node.branch_leads_to_zero_terminal(depth, x, self_blue_count, self_red_count, opponent_blue_count + opponent_red_count)) {
       continue;
     } else {
       unique_ptr<Node> child_node = make_unique<Node>(current_node, x);
@@ -91,7 +91,7 @@ void verify_zdd_enumeration(Node& current_node, vector<unsigned char>& board_obj
       if(x == 0) {
 	verify_zdd_enumeration(*child_node, board_object_ids, zdd, depth + 1, enumerated_configuration_id, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
       } else {
-	board_object_ids.push_back(current_node.get_loc_stateid());
+	board_object_ids.push_back(current_node.get_object_state_id());
 	verify_zdd_enumeration(*child_node, board_object_ids, zdd, depth + 1, enumerated_configuration_id, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
 	board_object_ids.pop_back();
       }

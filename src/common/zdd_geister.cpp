@@ -47,7 +47,7 @@ void ZDD::construct_zdd(int board_nb, int board_nr, int board_ne) noexcept {
 	// follow the 0-branch or 1-branch
 	for(int x = 0; x < 2; x++) {
 	  // check whether the 0-leaf is reached
-	  if(n->IsNextLeaf0(d, x, board_nb, board_nr, board_ne)) {  // if the x-branch leads to the 0-leaf
+	  if(n->branch_leads_to_zero_terminal(d, x, board_nb, board_nr, board_ne)) {  // if the x-branch leads to the 0-leaf
 	    if(x == 0) n->m_left = l0.get();
 	    else n->m_right = l0.get();
 	  } else if(d == 143) {   // if the maximum depth is reached
@@ -64,7 +64,7 @@ void ZDD::construct_zdd(int board_nb, int board_nr, int board_ne) noexcept {
 	    } else {
 	      // share equivalent nodes
 	      for(size_t l = 0; l < m_N[d+1].size(); l++) {
-		if(m_N[d+1][l]->ExistEquivalentNode(*c)) {
+		if(m_N[d+1][l]->has_equivalent_state(*c)) {
 		  if(x == 0) n->m_left = m_N[d+1][l].get();
 		  else n->m_right = m_N[d+1][l].get();
 		  break;
@@ -88,17 +88,17 @@ void ZDD::construct_zdd(int board_nb, int board_nr, int board_ne) noexcept {
     end = 0;
     for(int i = 0; i < 143; i++){
       for(size_t j = 0; j < m_N[i].size(); j++){
-	if(!m_N[i][j]->m_left->IsLeaf0() && !m_N[i][j]->m_left->IsLeaf1() && !m_N[i][j]->IsRedundantNode()){
-	  if(m_N[i][j]->m_left->m_right->IsLeaf0()){
+	if(!m_N[i][j]->m_left->is_zero_terminal() && !m_N[i][j]->m_left->is_one_terminal() && !m_N[i][j]->is_redundant()){
+	  if(m_N[i][j]->m_left->m_right->is_zero_terminal()){
 	    end = 1;
-	    m_N[i][j]->m_left->setRedundantNode();
+	    m_N[i][j]->m_left->mark_redundant();
 	    m_N[i][j]->m_left = m_N[i][j]->m_left->m_left;
 	  }
 	}
-	if(!m_N[i][j]->m_right->IsLeaf0() && !m_N[i][j]->m_right->IsLeaf1() && !m_N[i][j]->IsRedundantNode()){
-	  if(m_N[i][j]->m_right->m_right->IsLeaf0()){
+	if(!m_N[i][j]->m_right->is_zero_terminal() && !m_N[i][j]->m_right->is_one_terminal() && !m_N[i][j]->is_redundant()){
+	  if(m_N[i][j]->m_right->m_right->is_zero_terminal()){
 	    end = 1;
-	    m_N[i][j]->m_right->setRedundantNode();
+	    m_N[i][j]->m_right->mark_redundant();
 	    m_N[i][j]->m_right = m_N[i][j]->m_right->m_left;
 	  }
 	}
@@ -107,19 +107,19 @@ void ZDD::construct_zdd(int board_nb, int board_nr, int board_ne) noexcept {
   }
   for(int i = 0; i < 144; i++){
     for(size_t j = 0; j < m_N[i].size(); j++){
-      if(m_N[i][j]->IsRedundantNode()){
+      if(m_N[i][j]->is_redundant()){
 	m_N[i].erase(m_N[i].begin() + j);
 	j--;
       }
     }
   }
 
-  m_N[0][0]->dfs();
+  m_N[0][0]->compute_subtree_statistics();
 
-  cout << "root->num = " << m_N[0][0]->get_num() << endl;
-  cout << "root->lengthmax = " << m_N[0][0]->get_lengthmax() << endl;
-  cout << "root->lengthmin = " << m_N[0][0]->get_lengthmin() << endl;
-  cout << "root->lengthave = " << (double)m_N[0][0]->get_lengthsum() / (double)m_N[0][0]->get_num() << endl;
+  cout << "root->num = " << m_N[0][0]->get_configuration_count() << endl;
+  cout << "root->lengthmax = " << m_N[0][0]->get_max_path_length() << endl;
+  cout << "root->lengthmin = " << m_N[0][0]->get_min_path_length() << endl;
+  cout << "root->lengthave = " << (double)m_N[0][0]->get_total_path_length() / (double)m_N[0][0]->get_configuration_count() << endl;
 
   int sum = 0;
 

@@ -39,10 +39,10 @@ public:
   ~ZDD() { /* destruct_zdd(); */ }
   // compute the three types of path lengths
   void out_info() const noexcept { 
-    cout << "root->num = " << m_N[0][0]->get_num() << endl;
-    cout << "root->lengthmax = " << m_N[0][0]->get_lengthmax() << endl;
-    cout << "root->lengthmin = " << m_N[0][0]->get_lengthmin() << endl;
-    cout << "root->lengthave = " << (double)m_N[0][0]->get_lengthsum() / (double)m_N[0][0]->get_num() << endl;
+    cout << "root->num = " << m_N[0][0]->get_configuration_count() << endl;
+    cout << "root->lengthmax = " << m_N[0][0]->get_max_path_length() << endl;
+    cout << "root->lengthmin = " << m_N[0][0]->get_min_path_length() << endl;
+    cout << "root->lengthave = " << (double)m_N[0][0]->get_total_path_length() / (double)m_N[0][0]->get_configuration_count() << endl;
   }
   void compute_array(unsigned long long int x, unsigned char* array_objid, size_t size) const noexcept {
     assert(size == 36);
@@ -53,14 +53,14 @@ public:
     }
     while(true) {
       assert(r);
-      if(r->get_f() == 60) break; // if this is a 1-leaf
-      assert(r->get_f() != 50 && (r->get_f() == 0 || r->get_f() == 1));
+      if(r->get_state_code() == 60) break; // if this is a 1-leaf
+      assert(r->get_state_code() != 50 && (r->get_state_code() == 0 || r->get_state_code() == 1));
 
-      if(r->m_left->get_num() <= x) {
-	x -= r->m_left->get_num();
-	assert(r->get_locid() == locid);
-	assert(r->get_locid() >= 0 && r->get_locid() <= static_cast<int>(size));
-	array_objid[static_cast<size_t>(r->get_locid())] = static_cast<unsigned char>(r->get_loc_stateid());
+      if(r->m_left->get_configuration_count() <= x) {
+	x -= r->m_left->get_configuration_count();
+	assert(r->get_square_index() == locid);
+	assert(r->get_square_index() >= 0 && r->get_square_index() <= static_cast<int>(size));
+	array_objid[static_cast<size_t>(r->get_square_index())] = static_cast<unsigned char>(r->get_object_state_id());
 	locid++;
 	r = r->m_right;
       } else {
@@ -72,10 +72,10 @@ public:
     assert(size == 36);
     const Node* r = m_N[0][0].get();
     unsigned long long int index = 0;
-    while(r->get_f() == 0 || r->get_f() == 1) {
-      assert(r->get_locid() >= 0 && r->get_locid() < static_cast<int>(size));
-      if(array_objid[static_cast<size_t>(r->get_locid())] == static_cast<unsigned char>(r->get_loc_stateid())) {
-	index += r->m_left->get_num();
+    while(r->get_state_code() == 0 || r->get_state_code() == 1) {
+      assert(r->get_square_index() >= 0 && r->get_square_index() < static_cast<int>(size));
+      if(array_objid[static_cast<size_t>(r->get_square_index())] == static_cast<unsigned char>(r->get_object_state_id())) {
+	index += r->m_left->get_configuration_count();
 	r = r->m_right;
       } else {
 	r = r->m_left;
