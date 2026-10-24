@@ -52,7 +52,7 @@ void verify_zdd_enumeration(Node& current_node, vector<unsigned char>& board_obj
     unsigned char decoded_board_object_ids[36];
 
     // Compare the enumerated board with the board decoded from the same ID.
-    zdd.compute_array(enumerated_configuration_id, decoded_board_object_ids, 36);
+    zdd.decode_configuration(enumerated_configuration_id, decoded_board_object_ids, 36);
     
     for(size_t i = 0; i < board_object_ids.size(); i++) {
       if(board_object_ids[i] != decoded_board_object_ids[i]) {
@@ -63,7 +63,7 @@ void verify_zdd_enumeration(Node& current_node, vector<unsigned char>& board_obj
     }
 
     // Encoding the enumerated board must recover its enumeration ID.
-    unsigned long long int encoded_configuration_id = zdd.compute_id(board_object_ids.data(), board_object_ids.size());
+    unsigned long long int encoded_configuration_id = zdd.encode_configuration(board_object_ids.data(), board_object_ids.size());
     if(enumerated_configuration_id != encoded_configuration_id) {
       cerr << "[error] ZDD encoding mismatch, configuration_id: " << enumerated_configuration_id << endl;
       terminate();

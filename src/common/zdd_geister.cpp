@@ -11,18 +11,19 @@
 
 using std::move;
 
-struct LocInfo {
+// Local object-count metadata; currently unused by diagram construction.
+struct ZddObjectInfo {
   uint8_t piece;
-  unsigned char nb;
-  unsigned char nr;
-  unsigned char uk;
+  unsigned char blue_count;
+  unsigned char red_count;
+  unsigned char unknown_count;
 
-  bool equal(const LocInfo &o) const noexcept {
-    return (piece == o.piece && nb == o.nb && nr == o.nr && uk == o.uk);
+  bool has_same_counts_and_piece(const ZddObjectInfo &other) const noexcept {
+    return (piece == other.piece && blue_count == other.blue_count && red_count == other.red_count && unknown_count == other.unknown_count);
   }
 };
 
-constexpr LocInfo tbl_objid2locinfo[6] = {
+constexpr ZddObjectInfo zdd_object_info_by_id[6] = {
      {(empty|self),    0, 0, 0},   //0
      {(unknown|enemy), 0, 0, 1},   //1
      {(blue|self),     1, 0, 0},   //2
@@ -31,47 +32,46 @@ constexpr LocInfo tbl_objid2locinfo[6] = {
      {(red|enemy),     0, 1, 0}    //5
 };					  
 
-// cunstruct a zdd
-void ZDD::construct_zdd(int board_nb, int board_nr, int board_ne) noexcept {
+// Enumerate node states by depth, share equivalent states, then reduce the diagram.
+void ZDD::build_diagram(int required_blue_count, int required_red_count, int required_unknown_count) noexcept {
   unique_ptr<Node> root = make_unique<Node>();   // root node
-  int d = -1;
-  Node* n;
+  int depth = -1;   // four candidate states per square
+  Node* current_node;
 
-  m_N[0].push_back(move(root));   // add the root node to N[0]
+  m_nodes_by_depth[0].push_back(move(root));
+  // Expand each square's four candidate object states without changing branch order.
   for(int i = 0; i < 36; i++) {
     for(int j = 0; j < 4; j++) {
-      d++;
-      for(size_t k = 0; k < m_N[d].size(); k++) {
-	n = m_N[d][k].get();
-
-	// follow the 0-branch or 1-branch
-	for(int x = 0; x < 2; x++) {
-	  // check whether the 0-leaf is reached
-	  if(n->branch_leads_to_zero_terminal(d, x, board_nb, board_nr, board_ne)) {  // if the x-branch leads to the 0-leaf
-	    if(x == 0) n->m_left = l0.get();
-	    else n->m_right = l0.get();
-	  } else if(d == 143) {   // if the maximum depth is reached
-	    if(x == 0) n->m_left = l1.get();
-	    else n->m_right = l1.get();
-	  } else {   // if the branch does not lead to the 0-leaf and the maximum depth has not been reached
-	    unique_ptr<Node> c = make_unique<Node>(*n, x);   // create a node
+      depth++;
+      for(size_t k = 0; k < m_nodes_by_depth[depth].size(); k++) {
+	current_node = m_nodes_by_depth[depth][k].get();
+	
+	for(int branch = 0; branch < 2; branch++) {
+	  
+	  if(current_node->branch_leads_to_zero_terminal(depth, branch, required_blue_count, required_red_count, required_unknown_count)) {
+	    if(branch == 0) current_node->m_left = m_zero_terminal.get();
+	    else current_node->m_right = m_zero_terminal.get();
+	  } else if(depth == 143) {
+	    if(branch == 0) current_node->m_left = m_one_terminal.get();
+	    else current_node->m_right = m_one_terminal.get();
+	  } else {
+	    unique_ptr<Node> child_node = make_unique<Node>(*current_node, branch);
 	    
-	    // if the node does not exist at depth d + 1, register it as a new node
-	    if(m_N[d+1].size() == 0) {     
-	      if(x == 0) n->m_left = c.get(); // connect the parent and child nodes
-	      else n->m_right = c.get();
-	      m_N[d+1].push_back(move(c));    // add the node to the set of nodes at the next depth
+	    if(m_nodes_by_depth[depth+1].size() == 0) {     
+	      if(branch == 0) current_node->m_left = child_node.get();
+	      else current_node->m_right = child_node.get();
+	      m_nodes_by_depth[depth+1].push_back(move(child_node));
 	    } else {
-	      // share equivalent nodes
-	      for(size_t l = 0; l < m_N[d+1].size(); l++) {
-		if(m_N[d+1][l]->has_equivalent_state(*c)) {
-		  if(x == 0) n->m_left = m_N[d+1][l].get();
-		  else n->m_right = m_N[d+1][l].get();
+
+	      for(size_t l = 0; l < m_nodes_by_depth[depth+1].size(); l++) {
+		if(m_nodes_by_depth[depth+1][l]->has_equivalent_state(*child_node)) {
+		  if(branch == 0) current_node->m_left = m_nodes_by_depth[depth+1][l].get();
+		  else current_node->m_right = m_nodes_by_depth[depth+1][l].get();
 		  break;
-		} else if(l == m_N[d+1].size() - 1) {
-		  if(x == 0) n->m_left = c.get();
-		  else n->m_right = c.get();
-		  m_N[d+1].push_back(move(c));
+		} else if(l == m_nodes_by_depth[depth+1].size() - 1) {
+		  if(branch == 0) current_node->m_left = child_node.get();
+		  else current_node->m_right = child_node.get();
+		  m_nodes_by_depth[depth+1].push_back(move(child_node));
 		  break;
 		}
 	      }
@@ -81,50 +81,53 @@ void ZDD::construct_zdd(int board_nb, int board_nr, int board_ne) noexcept {
       }
     }
   }
+
+  // Bypas nodes whose one branch leads to the zero terminal.
+  int reduction_changed = 1;
   
-  int end = 1;
-  // remove redundant nodes
-  while(end == 1){
-    end = 0;
+  while(reduction_changed == 1){
+    reduction_changed = 0;
     for(int i = 0; i < 143; i++){
-      for(size_t j = 0; j < m_N[i].size(); j++){
-	if(!m_N[i][j]->m_left->is_zero_terminal() && !m_N[i][j]->m_left->is_one_terminal() && !m_N[i][j]->is_redundant()){
-	  if(m_N[i][j]->m_left->m_right->is_zero_terminal()){
-	    end = 1;
-	    m_N[i][j]->m_left->mark_redundant();
-	    m_N[i][j]->m_left = m_N[i][j]->m_left->m_left;
+      for(size_t j = 0; j < m_nodes_by_depth[i].size(); j++){
+	if(!m_nodes_by_depth[i][j]->m_left->is_zero_terminal() && !m_nodes_by_depth[i][j]->m_left->is_one_terminal() && !m_nodes_by_depth[i][j]->is_redundant()){
+	  if(m_nodes_by_depth[i][j]->m_left->m_right->is_zero_terminal()){
+	    reduction_changed = 1;
+	    m_nodes_by_depth[i][j]->m_left->mark_redundant();
+	    m_nodes_by_depth[i][j]->m_left = m_nodes_by_depth[i][j]->m_left->m_left;
 	  }
 	}
-	if(!m_N[i][j]->m_right->is_zero_terminal() && !m_N[i][j]->m_right->is_one_terminal() && !m_N[i][j]->is_redundant()){
-	  if(m_N[i][j]->m_right->m_right->is_zero_terminal()){
-	    end = 1;
-	    m_N[i][j]->m_right->mark_redundant();
-	    m_N[i][j]->m_right = m_N[i][j]->m_right->m_left;
+	if(!m_nodes_by_depth[i][j]->m_right->is_zero_terminal() && !m_nodes_by_depth[i][j]->m_right->is_one_terminal() && !m_nodes_by_depth[i][j]->is_redundant()){
+	  if(m_nodes_by_depth[i][j]->m_right->m_right->is_zero_terminal()){
+	    reduction_changed = 1;
+	    m_nodes_by_depth[i][j]->m_right->mark_redundant();
+	    m_nodes_by_depth[i][j]->m_right = m_nodes_by_depth[i][j]->m_right->m_left;
 	  }
 	}
       }
     }
   }
+  // Delete bypassed nodes after all incoming links have been redirected.
   for(int i = 0; i < 144; i++){
-    for(size_t j = 0; j < m_N[i].size(); j++){
-      if(m_N[i][j]->is_redundant()){
-	m_N[i].erase(m_N[i].begin() + j);
+    for(size_t j = 0; j < m_nodes_by_depth[i].size(); j++){
+      if(m_nodes_by_depth[i][j]->is_redundant()){
+	m_nodes_by_depth[i].erase(m_nodes_by_depth[i].begin() + j);
 	j--;
       }
     }
   }
 
-  m_N[0][0]->compute_subtree_statistics();
+  // Count configurations and accumulate root-to-terminal path lengths.
+  m_nodes_by_depth[0][0]->compute_subtree_statistics();
 
-  cout << "root->num = " << m_N[0][0]->get_configuration_count() << endl;
-  cout << "root->lengthmax = " << m_N[0][0]->get_max_path_length() << endl;
-  cout << "root->lengthmin = " << m_N[0][0]->get_min_path_length() << endl;
-  cout << "root->lengthave = " << (double)m_N[0][0]->get_total_path_length() / (double)m_N[0][0]->get_configuration_count() << endl;
+  cout << "[zdd] configuration_count: " << m_nodes_by_depth[0][0]->get_configuration_count() << endl;
+  cout << "[zdd] max_path_length: " << m_nodes_by_depth[0][0]->get_max_path_length() << endl;
+  cout << "[zdd] min_path_length: " << m_nodes_by_depth[0][0]->get_min_path_length() << endl;
+  cout << "[zdd] mean_path_length: " << (double)m_nodes_by_depth[0][0]->get_total_path_length() / (double)m_nodes_by_depth[0][0]->get_configuration_count() << endl;
 
-  int sum = 0;
+  int node_count = 0;
 
   for(int i = 0; i < 144; i++){
-    sum += m_N[i].size();
+    node_count += m_nodes_by_depth[i].size();
   }
-  cout << "sumad =" << sum << endl;   // number of nodes
+  cout << "[zdd] node_count: " << node_count << endl;
 }

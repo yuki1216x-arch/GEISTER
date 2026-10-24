@@ -39,7 +39,7 @@ Posi::Posi() noexcept {
 Posi::Posi(unsigned long long int x, const ZDD& zdd,
 	   int self_blue_count, int self_red_count, int enemy_blue_count, int enemy_red_count) noexcept {
   unsigned char array_objid[36];
-  zdd.compute_array(x, array_objid, 36);
+  zdd.decode_configuration(x, array_objid, 36);
   for(int loc = 0; loc < 36; loc++) m_array[loc] = tbl_objid2locinfo[array_objid[loc]];
   m_self_blue_count = self_blue_count;
   m_self_red_count = self_red_count;
@@ -50,7 +50,7 @@ Posi::Posi(unsigned long long int x, const ZDD& zdd,
 void Posi::make_posi(unsigned long long int x, const ZDD& zdd,
 		     int self_blue_count, int self_red_count, int enemy_blue_count, int enemy_red_count) noexcept {
   unsigned char array_objid[36];
-  zdd.compute_array(x, array_objid, 36);
+  zdd.decode_configuration(x, array_objid, 36);
   for(int loc = 0; loc < 36; loc++) m_array[loc] = tbl_objid2locinfo[array_objid[loc]];
   m_self_blue_count = self_blue_count;
   m_self_red_count = self_red_count;
@@ -214,7 +214,7 @@ unsigned long long int Posi::getzddnum(const ZDD& zdd) const noexcept {
   for(int i = 0; i < 36; i++) {
     array[i] = getobjnum(m_array[i]);
   }
-  return zdd.compute_id(array, 36);
+  return zdd.encode_configuration(array, 36);
 }
 
 int Posi::getunknowninfo(unsigned char zdd_code[70][36]) const noexcept {

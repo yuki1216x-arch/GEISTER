@@ -91,7 +91,7 @@ unsigned long long int get_zdd_id_from_fen(const ZDD& zdd, string fen_text) noex
     }
   }
   assert(square_id == -1);
-  return zdd.compute_id(board_object_ids, 36);
+  return zdd.encode_configuration(board_object_ids, 36);
 }
 
 int main(int argc, char *argv[]) {
