@@ -288,26 +288,26 @@ static void run_worker(int iteration, int self_blue_count, int self_red_count, i
     queue_lock.unlock();
     
     unsigned long long int configuration_id = task->get_configuration_id();
-    Posi position;
-    position.make_posi(configuration_id, zdd_parent, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
+    Position position;
+    position.load_configuration(configuration_id, zdd_parent, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
     Action actions[max_legal_moves];
-    int legal_move_count = position.compute_actions(actions, iteration);
+    int legal_move_count = position.generate_legal_actions(actions, iteration);
     assert(legal_move_count > 0 && legal_move_count < max_legal_moves);
       
     int captured_piece_type[max_legal_moves] = {};
     long long int child_results[max_legal_moves];
       
     for(int i = 0; i < legal_move_count; i++) {
-      int move_result = position.make_action(actions[i]);
+      int move_result = position.apply_action(actions[i]);
       if(move_result >= 0) {
 	if(move_result == 0) {
-	  child_results[i] = position.getzddnum(zdd_parent);
+	  child_results[i] = position.get_zdd_id(zdd_parent);
 	} else if(move_result == 1) {
-	  child_results[i] = position.getzddnum(zdd_child_after_blue_capture);
+	  child_results[i] = position.get_zdd_id(zdd_child_after_blue_capture);
 	  captured_piece_type[i] = 1;
 	} else {
 	  assert(move_result == 2);
-	  child_results[i] = position.getzddnum(zdd_child_after_red_capture);
+	  child_results[i] = position.get_zdd_id(zdd_child_after_red_capture);
 	  captured_piece_type[i] = 2;
 	}
       } else {

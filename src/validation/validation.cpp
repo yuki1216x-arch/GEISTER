@@ -269,17 +269,17 @@ int main(int argc, char *argv[]) {
   Table opponent_turn_table_after_blue_capture(0, opponent_after_blue_capture_database_path.c_str(), 2, configuration_count_opponent_after_capture);
   Table opponent_turn_table_after_red_capture(0, opponent_after_red_capture_database_path.c_str(), 2, configuration_count_opponent_after_capture);
   
-  Posi position;
+  Position position;
   bool validation_failed = false;
 
   // Verify both turn databases using forward-generated successors.
   for(int player_to_move = 1; player_to_move <= 2; player_to_move++) {
     for(unsigned long long int i = 0ULL; i < configuration_count; i++) {
-      position.make_posi(i, *zdd, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
+      position.load_configuration(i, *zdd, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
       Action actions[32] = {};
       unsigned char compatible_boards[70][36] = {};
-      int legal_move_count = position.compute_actions(actions, player_to_move);
-      int compatible_configuration_count = position.getunknowninfo(compatible_boards);
+      int legal_move_count = position.generate_legal_actions(actions, player_to_move);
+      int compatible_configuration_count = position.enumerate_compatible_configurations(compatible_boards);
     
       int parent_label;
       if(player_to_move == 1) parent_label = self_turn_table.get(i);
@@ -292,23 +292,23 @@ int main(int argc, char *argv[]) {
       int reversed_view_labels[70] = {};
       for(int j = 0; j < legal_move_count; j++) {
 	for(int m = 0; m < compatible_configuration_count; m++) {
-	  position.make_posi_n(compatible_boards, m);
-	  int move_result = position.make_action(actions[j]);
+	  position.load_compatible_configuration(compatible_boards, m);
+	  int move_result = position.apply_action(actions[j]);
 	  if(move_result >= 0) {
-	    position.make_posi_myself();
+	    position.hide_opponent_colors();
 	    if(player_to_move == 1) {
-	      if(move_result == 0) child_labels[j][m] = opponent_turn_table.get(position.getzddnum(*zdd));
-	      else if(move_result == 1) child_labels[j][m] = opponent_turn_table_after_blue_capture.get(position.getzddnum(*zdd_opponent_after_capture));
+	      if(move_result == 0) child_labels[j][m] = opponent_turn_table.get(position.get_zdd_id(*zdd));
+	      else if(move_result == 1) child_labels[j][m] = opponent_turn_table_after_blue_capture.get(position.get_zdd_id(*zdd_opponent_after_capture));
 	      else {
 		assert(move_result == 2);
-		child_labels[j][m] = opponent_turn_table_after_red_capture.get(position.getzddnum(*zdd_opponent_after_capture));
+		child_labels[j][m] = opponent_turn_table_after_red_capture.get(position.get_zdd_id(*zdd_opponent_after_capture));
 	      }
 	    } else {
-	      if(move_result == 0) child_labels[j][m] = self_turn_table.get(position.getzddnum(*zdd));
-	      else if(move_result == 1) child_labels[j][m] = self_turn_table_after_blue_capture.get(position.getzddnum(*zdd_self_after_blue_capture));
+	      if(move_result == 0) child_labels[j][m] = self_turn_table.get(position.get_zdd_id(*zdd));
+	      else if(move_result == 1) child_labels[j][m] = self_turn_table_after_blue_capture.get(position.get_zdd_id(*zdd_self_after_blue_capture));
 	      else {
 		assert(move_result == 2);
-		child_labels[j][m] = self_turn_table_after_red_capture.get(position.getzddnum(*zdd_self_after_red_capture));
+		child_labels[j][m] = self_turn_table_after_red_capture.get(position.get_zdd_id(*zdd_self_after_red_capture));
 	      }
 	    }
 	  } else {
@@ -323,10 +323,10 @@ int main(int argc, char *argv[]) {
       }
       // Convert compatible boards to the opponent viewpoint for FL checks.
       for(int m = 0; m < compatible_configuration_count; m++) {
-	position.make_posi_n(compatible_boards, m);
-	position.make_posi_opponent();
-	if(player_to_move == 1) reversed_view_labels[m] = opponent_turn_table_reversed.get(position.getzddnum(*zdd_reversed));
-	else reversed_view_labels[m] = self_turn_table_reversed.get(position.getzddnum(*zdd_reversed));
+	position.load_compatible_configuration(compatible_boards, m);
+	position.switch_to_opponent_view();
+	if(player_to_move == 1) reversed_view_labels[m] = opponent_turn_table_reversed.get(position.get_zdd_id(*zdd_reversed));
+	else reversed_view_labels[m] = self_turn_table_reversed.get(position.get_zdd_id(*zdd_reversed));
       }
       if(parent_label == v_win || parent_label == v_can_lose) {
 	if(has_invalid_win_or_can_lose_label(parent_label, child_labels, legal_move_count, compatible_configuration_count, player_to_move, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count)) {
@@ -340,7 +340,7 @@ int main(int argc, char *argv[]) {
 	    if(j != legal_move_count - 1) cerr << " ";
 	  }
 	  cout << endl;
-	  position.make_posi(i, *zdd, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
+	  position.load_configuration(i, *zdd, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
 	  position.print();
 	  break;
 	}
@@ -363,7 +363,7 @@ int main(int argc, char *argv[]) {
 	    }
 	  }
 	  cout << endl;
-	  position.make_posi(i, *zdd, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
+	  position.load_configuration(i, *zdd, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
 	  position.print();
 	  break;
 	}

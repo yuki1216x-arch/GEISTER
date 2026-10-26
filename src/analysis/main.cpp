@@ -501,15 +501,15 @@ static void run_worker(int iteration, int self_blue_count, int self_red_count, i
     unsigned long long int configuration_id = task->get_configuration_id();
     unsigned int label = task->get_initial_label();
     if(label == v_unknown) {
-      Posi position;
+      Position position;
       // create the position for a given ID
-      position.make_posi(configuration_id, zdd_parent, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
+      position.load_configuration(configuration_id, zdd_parent, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
       Action actions[max_legal_moves];
       unsigned char compatible_boards[max_compatible_configurations][36];
       // enumerate legal moves for the position
-      int legal_move_count = position.compute_actions(actions, iteration);
+      int legal_move_count = position.generate_legal_actions(actions, iteration);
       // enumerate all possible third-party configurations for the position
-      int compatible_configuration_count = position.getunknowninfo(compatible_boards);
+      int compatible_configuration_count = position.enumerate_compatible_configurations(compatible_boards);
       assert(legal_move_count > 0 && legal_move_count < max_legal_moves);
       assert(compatible_configuration_count > 0 && compatible_configuration_count <= max_compatible_configurations);
       
@@ -519,19 +519,19 @@ static void run_worker(int iteration, int self_blue_count, int self_red_count, i
       for(int i = 0; i < legal_move_count; i++) {
 	for(int j = 0; j < compatible_configuration_count; j++) {
 	  // create a configuration from a third-party perspective
-	  position.make_posi_n(compatible_boards, j);
-	  int move_result = position.make_action(actions[i]);
+	  position.load_compatible_configuration(compatible_boards, j);
+	  int move_result = position.apply_action(actions[i]);
 	  // the game is not decided directly
 	  if(move_result >= 0) {
-	    position.make_posi_myself();
+	    position.hide_opponent_colors();
 	    if(move_result == 0) {
-	      child_results[i][j] = position.getzddnum(zdd_parent);
+	      child_results[i][j] = position.get_zdd_id(zdd_parent);
 	    } else if(move_result == 1) {
-	      child_results[i][j] = position.getzddnum(zdd_child_after_blue_capture);
+	      child_results[i][j] = position.get_zdd_id(zdd_child_after_blue_capture);
 	      captured_piece_type[i][j] = 1;
 	    } else {
 	      assert(move_result == 2);
-	      child_results[i][j] = position.getzddnum(zdd_child_after_red_capture);
+	      child_results[i][j] = position.get_zdd_id(zdd_child_after_red_capture);
 	      captured_piece_type[i][j] = 2;
 	    }
 	  } else {
@@ -545,15 +545,15 @@ static void run_worker(int iteration, int self_blue_count, int self_red_count, i
     }
     
     if(label == v_unknown || label == v_can_lose) {
-      Posi position;
+      Position position;
       // create the position for a given ID
-      position.make_posi(configuration_id, zdd_parent, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
+      position.load_configuration(configuration_id, zdd_parent, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
       Action actions[max_legal_moves];
       unsigned char compatible_boards[max_compatible_configurations][36];
       // enumerate legal moves for the position
-      int legal_move_count = position.compute_actions(actions, iteration);
+      int legal_move_count = position.generate_legal_actions(actions, iteration);
       // enumerate all possible third-party configurations for the position
-      int compatible_configuration_count = position.getunknowninfo(compatible_boards);
+      int compatible_configuration_count = position.enumerate_compatible_configurations(compatible_boards);
       assert(legal_move_count > 0 && legal_move_count < max_legal_moves);
       assert(compatible_configuration_count > 0 && compatible_configuration_count <= max_compatible_configurations);
 
@@ -564,19 +564,19 @@ static void run_worker(int iteration, int self_blue_count, int self_red_count, i
 	for(int i = 0; i < compatible_configuration_count; i++) {
 	  for(int j = 0; j < legal_move_count; j++) {
 	    // create a configuration from a third-party perspective
-	    position.make_posi_n(compatible_boards, i);
-	    int move_result = position.make_action(actions[j]);
+	    position.load_compatible_configuration(compatible_boards, i);
+	    int move_result = position.apply_action(actions[j]);
 	    // the game is not decided directly
 	    if(move_result >= 0) {
-	      position.make_posi_myself();
+	      position.hide_opponent_colors();
 	      if(move_result == 0) {
-		loss_child_results[i][j] = position.getzddnum(zdd_parent);
+		loss_child_results[i][j] = position.get_zdd_id(zdd_parent);
 	      } else if(move_result == 1) {
-		loss_child_results[i][j] = position.getzddnum(zdd_child_after_blue_capture);
+		loss_child_results[i][j] = position.get_zdd_id(zdd_child_after_blue_capture);
 		loss_captured_piece_types[i][j] = 1;
 	      } else {
 		assert(move_result == 2);
-		loss_child_results[i][j] = position.getzddnum(zdd_child_after_red_capture);
+		loss_child_results[i][j] = position.get_zdd_id(zdd_child_after_red_capture);
 		loss_captured_piece_types[i][j] = 2;
 	      }
 	    } else {
@@ -591,9 +591,9 @@ static void run_worker(int iteration, int self_blue_count, int self_red_count, i
 	long long int reversed_configuration_ids[max_compatible_configurations];
 
 	for(int i = 0; i < compatible_configuration_count; i++) {
-	  position.make_posi_n(compatible_boards, i);
-	  position.make_posi_opponent();
-	  reversed_configuration_ids[i] = position.getzddnum(zdd_parent_reversed);
+	  position.load_compatible_configuration(compatible_boards, i);
+	  position.switch_to_opponent_view();
+	  reversed_configuration_ids[i] = position.get_zdd_id(zdd_parent_reversed);
 	}
 	task->set_loss_children(compatible_configuration_count, reversed_configuration_ids);
       }

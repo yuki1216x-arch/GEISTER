@@ -69,7 +69,7 @@ int main(int argc, char *argv[]) {
   string database_path = "data/db/" + table_filename_prefix + '_' + to_string(self_blue_count) + '-' + to_string(self_red_count) + '-' + to_string(opponent_blue_count) + '-' + to_string(opponent_red_count) + ".bin";
   
   unique_ptr<ZDD> zdd = make_unique<ZDD>(self_blue_count, self_red_count, opponent_blue_count + opponent_red_count);
-  Posi position;
+  Position position;
 
   // Sample with replacement; seed the generator from the current clock.
   unsigned long long int sampled_configuration_ids[100];
@@ -104,7 +104,7 @@ int main(int argc, char *argv[]) {
     
     cout << "[lookup] configuration_id: " << configuration_id << endl;
 
-    position.make_posi(configuration_id, *zdd, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
+    position.load_configuration(configuration_id, *zdd, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
     position.print();
     
     cout << "[lookup] label_code: " << label_code;

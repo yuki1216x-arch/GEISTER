@@ -73,17 +73,17 @@ unsigned long long int get_zdd_id_from_fen(const ZDD& zdd, string fen_text) noex
   for(std::size_t i = 0; i < rows.size(); i++) {
     for(std::size_t j = 0; j < rows[i].size(); j++) {
       assert(i >= 0 && i <= 5);
-      if(rows[i][j] != tbl_objid2locinfo[1].piece_ch && rows[i][j] != tbl_objid2locinfo[2].piece_ch && rows[i][j] != tbl_objid2locinfo[3].piece_ch) {
+      if(rows[i][j] != square_info_by_object_id[1].display_character && rows[i][j] != square_info_by_object_id[2].display_character && rows[i][j] != square_info_by_object_id[3].display_character) {
 	assert(rows[i][j] - '0' >= 1 && rows[i][j] - '0' <= square_id % 6 + 1);
 	for(int k = rows[i][j] - '0'; k > 0; k--) {
 	  board_object_ids[square_id] = 0;
 	  square_id--;
 	}
       } else {
-	if (rows[i][j] == tbl_objid2locinfo[1].piece_ch) board_object_ids[square_id] = 1;
-	else if (rows[i][j] == tbl_objid2locinfo[2].piece_ch) board_object_ids[square_id] = 2;
+	if (rows[i][j] == square_info_by_object_id[1].display_character) board_object_ids[square_id] = 1;
+	else if (rows[i][j] == square_info_by_object_id[2].display_character) board_object_ids[square_id] = 2;
 	else {
-	  assert(rows[i][j] == tbl_objid2locinfo[3].piece_ch);
+	  assert(rows[i][j] == square_info_by_object_id[3].display_character);
 	  board_object_ids[square_id] = 3;
 	}
 	square_id--;
@@ -116,7 +116,7 @@ int main(int argc, char *argv[]) {
   string database_path = "data/db/" + table_filename_prefix + '_' + to_string(self_blue_count) + '-' + to_string(self_red_count) + '-' + to_string(opponent_blue_count) + '-' + to_string(opponent_red_count) + ".bin";
   
   unique_ptr<ZDD> zdd = make_unique<ZDD>(self_blue_count, self_red_count, opponent_blue_count + opponent_red_count);
-  Posi position;
+  Position position;
 
   unsigned long long int configuration_id = get_zdd_id_from_fen(*zdd, argv[6]);
   // Skip the 8-byte header; each byte stores four 2-bit entries.
@@ -124,7 +124,7 @@ int main(int argc, char *argv[]) {
 
   cout << "[lookup] configuration_id：" << configuration_id << endl;
 
-  position.make_posi(configuration_id, *zdd, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
+  position.load_configuration(configuration_id, *zdd, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
   position.print();
 
   std::ifstream database_file(database_path, std::ios::binary);
