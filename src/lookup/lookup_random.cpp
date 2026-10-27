@@ -112,7 +112,7 @@ int main(int argc, char *argv[]) {
     if(label_code == v_unknown) cout << ", label: unknown" << endl;
     else if(label_code == v_win) cout << ", label: forced win (FW)" << endl;
     else if(label_code == v_loss) cout << ", label: forced loss (FL)" << endl;
-    else if(label_code == v_can_lose) cout << ", label：can lose (CL)" << endl;
+    else if(label_code == v_can_lose) cout << ", label: can lose (CL)" << endl;
     else {
       cerr << "\n[error] Invalid label code: " << label_code << endl;
       return 1;

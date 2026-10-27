@@ -140,14 +140,14 @@ test: $(BIN_DIR)/main
 		fi; \
 	done; \
 	if [ $$failed -ne 0 ]; then \
-		echo "buildに失敗した"; \
+		echo "Database comparison failed."; \
 		exit 1; \
 	else \
-		echo "buildに成功した"; \
+		echo "Database comparison passed."; \
 	fi
 
 # =========================
 # phony
 # =========================
 
-.PHONY: all debug clean
+.PHONY: all assert debug clean test

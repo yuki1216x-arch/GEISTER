@@ -83,7 +83,7 @@ Table::Table(int iteration, const char* database_path, size_t bits_per_entry,
 
   assert(database_path && database_path[0] != '\0');
   if(read_output == TableReadOutput::verbose) {
-    cout << "[table] Raading database: " << database_path << endl;
+    cout << "[table] Reading database: " << database_path << endl;
   }
 
   // set() preserves neighboring bits, so initialize every word before filling entries.

@@ -122,7 +122,7 @@ int main(int argc, char *argv[]) {
   // Skip the 8-byte header; each byte stores four 2-bit entries.
   unsigned long long int entry_byte_offset = 8 + configuration_id / 4;
 
-  cout << "[lookup] configuration_id：" << configuration_id << endl;
+  cout << "[lookup] configuration_id: " << configuration_id << endl;
 
   position.load_configuration(configuration_id, *zdd, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count);
   position.print();
@@ -154,7 +154,7 @@ int main(int argc, char *argv[]) {
   else if(label_code == v_loss) cout << ", label: forced loss (FL)" << endl;
   else {
     assert(label_code == v_can_lose || label_code == 5);
-    std::cout << ", label：can lose (CL)" << endl;
+    std::cout << ", label: can lose (CL)" << endl;
   }
 
   return 0;
