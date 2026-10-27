@@ -18,7 +18,7 @@ ANALYSIS_DIR      := src/analysis
 VALIDATION_DIR    := src/validation
 LOOKUP_DIR        := src/lookup
 
-BIN_DIR  := bin
+BIN_DIR  ?= bin
 OBJ_DIR  := obj
 
 # =========================
@@ -28,7 +28,7 @@ OBJ_DIR  := obj
 COMMON_BASE_SRC  := \
 	src/common/node.cpp \
 	src/common/zdd_geister.cpp \
-	src/common/posi_geister.cpp \
+	src/common/position_geister.cpp \
 	src/common/table.cpp
 
 ANALYSIS_COMMON_SRC  := \
@@ -86,10 +86,13 @@ $(BIN_DIR)/%: $(LOOKUP_DIR)/%.cpp $(LOOKUP_COMMON_SRC)
 	@mkdir -p $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@
 
-# reachability
-# $(BIN_DIR)/%: $(REACHABILITY_DIR)/%.cpp $(REACHABILITY_COMMON_SRC)
-#	@mkdir -p $(BIN_DIR)
-#	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@
+# =========================
+# assertion-enabled build
+# =========================
+
+# Keep assertion-enabled executables separate from the normal -DNDEBUG build.
+assert:
+	$(MAKE) BIN_DIR=bin/assert CXXFLAGS="$(filter-out -DNDEBUG,$(CXXFLAGS)) -UNDEBUG" all
 
 # =========================
 # debug build

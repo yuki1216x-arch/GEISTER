@@ -7,7 +7,7 @@
 #include "../common/node.hpp"
 #include "../common/table.hpp"
 #include "../common/zdd_geister.hpp"
-#include "../common/posi_geister.hpp"
+#include "../common/position_geister.hpp"
 
 using std::unique_ptr;
 using std::make_unique;
@@ -133,7 +133,7 @@ bool has_invalid_win_or_can_lose_label(int parent_label, int child_labels[32][70
       for(int j = 0; j < legal_move_count; j++) {
 	int can_lose_configuration_count = 0;
 	for(int m = 0; m < compatible_configuration_count; m++) {
-	  if(child_labels[j][m] == v_can_lose || child_labels[j][m] == v_lose) can_lose_configuration_count++;
+	  if(child_labels[j][m] == v_can_lose || child_labels[j][m] == v_loss) can_lose_configuration_count++;
 	}
 	if(can_lose_configuration_count < 1) return true;
       }
@@ -141,7 +141,7 @@ bool has_invalid_win_or_can_lose_label(int parent_label, int child_labels[32][70
     } else {
       for(int j = 0; j < legal_move_count; j++) {
 	for(int m = 0; m < compatible_configuration_count; m++) {
-	  if(child_labels[j][m] == v_can_lose || child_labels[j][m] == v_lose) {
+	  if(child_labels[j][m] == v_can_lose || child_labels[j][m] == v_loss) {
 	    return false;
 	  }
 	}
@@ -154,7 +154,7 @@ bool has_invalid_win_or_can_lose_label(int parent_label, int child_labels[32][70
 // Return true when an assigned FL label violates its successor or reversed-view condition.
 bool has_invalid_loss_label(int parent_label, int child_labels[32][70], int reversed_view_labels[70], int legal_move_count, int compatible_configuration_count,
 					int play_to_move, int self_blue_count, int self_red_count, int opponent_blue_count, int opponent_red_count) {
-  assert(parent_label == v_lose);
+  assert(parent_label == v_loss);
 
   assert(compatible_configuration_count > 0 && compatible_configuration_count <= 70);
   assert(legal_move_count > 0 && legal_move_count < 32);
@@ -162,7 +162,7 @@ bool has_invalid_loss_label(int parent_label, int child_labels[32][70], int reve
   if(play_to_move == 1) {
     for(int j = 0; j < legal_move_count; j++) {
       for(int m = 0; m < compatible_configuration_count; m++) {
-	if(child_labels[j][m] != v_lose) return true;
+	if(child_labels[j][m] != v_loss) return true;
       }
     }
     return false;
@@ -315,7 +315,7 @@ int main(int argc, char *argv[]) {
 	    if(move_result == -1) child_labels[j][m] = v_win;
 	    else {
 	      assert(move_result == -2);
-	      child_labels[j][m] = v_lose;
+	      child_labels[j][m] = v_loss;
 	    }
 	  }
 	  position.undo_action();
@@ -345,7 +345,7 @@ int main(int argc, char *argv[]) {
 	  break;
 	}
       }
-      if(parent_label == v_lose) {
+      if(parent_label == v_loss) {
 	if(has_invalid_loss_label(parent_label, child_labels, reversed_view_labels, legal_move_count, compatible_configuration_count, player_to_move, self_blue_count, self_red_count, opponent_blue_count, opponent_red_count)) {
 	  validation_failed = true;
 	  cout << "[error] FL condition mismatch, configuration_id: " << i << ", parent_label_code: " << parent_label << endl;

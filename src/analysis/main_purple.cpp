@@ -13,7 +13,7 @@
 #include <mutex>
 #include <condition_variable>
 #include "../common/table.hpp"
-#include "../common/posi_geister.hpp"
+#include "../common/position_geister.hpp"
 #include "../common/zdd_geister.hpp"
 
 using std::ref;
@@ -189,7 +189,7 @@ static void run_coordinator(int iteration, int self_blue_count, int self_red_cou
 		child_label = child_table_after_red_capture.get((unsigned long long int)child_result);
 	      }
 	      if(child_label == v_win) winning_move_count++;
-	      else if(child_label == v_lose) losing_move_count++;
+	      else if(child_label == v_loss) losing_move_count++;
 	      else {
 		assert(child_label == v_unknown);
 	      }
@@ -215,7 +215,7 @@ static void run_coordinator(int iteration, int self_blue_count, int self_red_cou
 	      }
 	    } else {
 	      if(losing_move_count >= 1) {
-		parent_table.set(configuration_id, v_lose);
+		parent_table.set(configuration_id, v_loss);
 		loss_assignment_count++;
 		label_update_count++;
 		label_assigned = true;
@@ -228,7 +228,7 @@ static void run_coordinator(int iteration, int self_blue_count, int self_red_cou
 	  if(!label_assigned) {
 	    if(iteration % 2 == 1) {
 	      if(losing_move_count == legal_move_count) {
-		parent_table.set(configuration_id, v_lose);
+		parent_table.set(configuration_id, v_loss);
 		loss_assignment_count++;
 		label_update_count++;
 	      }
@@ -255,12 +255,12 @@ static void run_coordinator(int iteration, int self_blue_count, int self_red_cou
   
   cout << "[output] Writing database: " << output_database_path << endl;
   {
-    OutTable out_table(iteration, output_database_path, configuration_count, 2);
+    TableWriter table_writer(iteration, output_database_path, configuration_count, 2);
     for(unsigned long long int i = 0; i < configuration_count; i++) {
-      out_table.write(parent_table.get(i));
+      table_writer.write(parent_table.get(i));
     }
-    out_table.flush();
-    out_table.outinfo();
+    table_writer.flush();
+    table_writer.print_statistics();
   }
   
   {

@@ -1,5 +1,5 @@
-#ifndef POSI_GEISTER_H
-#define POSI_GEISTER_H
+#ifndef POSITION_GEISTER_H
+#define POSITION_GEISTER_H
 #include <cassert>
 #include <iostream>
 #include <sstream>

@@ -9,7 +9,7 @@
 #include <functional>
 #include <iostream>
 #include <vector>
-#include "posi_geister.hpp"
+#include "position_geister.hpp"
 
 using std::copy;
 using std::function;
@@ -268,7 +268,7 @@ int Position::apply_action(const Action& action) noexcept {
     int result;
     if(source_square == 30 || source_square == 35) result = -1;
     else {
-      assert(source_square == 0 || source_sqaure == 5);
+      assert(source_square == 0 || source_square == 5);
 #ifdef USE_PURPLE
       assert(m_board[source_square].piece == (unknown|enemy));
       result = -2;

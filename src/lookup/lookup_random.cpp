@@ -8,7 +8,7 @@
 #include <vector>
 #include "table.hpp"
 #include "zdd_geister.hpp"
-#include "posi_geister.hpp"
+#include "position_geister.hpp"
 
 using std::unique_ptr;
 using std::make_unique;
@@ -111,7 +111,7 @@ int main(int argc, char *argv[]) {
     
     if(label_code == v_unknown) cout << ", label: unknown" << endl;
     else if(label_code == v_win) cout << ", label: forced win (FW)" << endl;
-    else if(label_code == v_lose) cout << ", label: forced loss (FL)" << endl;
+    else if(label_code == v_loss) cout << ", label: forced loss (FL)" << endl;
     else if(label_code == v_can_lose) cout << ", label：can lose (CL)" << endl;
     else {
       cerr << "\n[error] Invalid label code: " << label_code << endl;

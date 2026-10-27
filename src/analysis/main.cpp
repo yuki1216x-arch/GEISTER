@@ -14,7 +14,7 @@
 #include <mutex>
 #include <condition_variable>
 #include "../common/table.hpp"
-#include "../common/posi_geister.hpp"
+#include "../common/position_geister.hpp"
 #include "../common/zdd_geister.hpp"
 
 using std::ref;
@@ -277,7 +277,7 @@ static void run_coordinator(int iteration, int self_blue_count, int self_red_cou
 		  }
 		  
 		  if(child_label == v_win) win_count++;
-		  else if(child_label == v_lose) loss_count++;
+		  else if(child_label == v_loss) loss_count++;
 		  else if(child_label == v_can_lose) can_lose_count++;
 		  else {
 		    assert(child_label == v_unknown);
@@ -380,7 +380,7 @@ static void run_coordinator(int iteration, int self_blue_count, int self_red_cou
 		    }
 		    
 		    if(child_label == v_win) win_count++;
-		    else if(child_label == v_lose) loss_count++;
+		    else if(child_label == v_loss) loss_count++;
 		    else if(child_label == v_can_lose) can_lose_count++;
 		    else {
 		      assert(child_label == v_unknown);
@@ -409,9 +409,9 @@ static void run_coordinator(int iteration, int self_blue_count, int self_red_cou
 	      if(!label_assigned) {
 		// forced loss
 		if(losing_configuration_count == compatible_configuration_count) {
-		  parent_table.set(configuration_id, v_lose);
+		  parent_table.set(configuration_id, v_loss);
 		  fl_assignment_count++, label_update_count++;
-		  label = v_lose;
+		  label = v_loss;
 		}
 	      }
 	    } else {
@@ -429,7 +429,7 @@ static void run_coordinator(int iteration, int self_blue_count, int self_red_cou
 		int child_label = child_table_reversed.get((unsigned long long int)child_result);
 		
 		if(child_label == v_win) win_count++;
-		else if(child_label == v_lose) loss_count++;
+		else if(child_label == v_loss) loss_count++;
 		else if(child_label == v_can_lose) can_lose_count++;
 		else {
 		  assert(child_label == v_unknown);
@@ -438,9 +438,9 @@ static void run_coordinator(int iteration, int self_blue_count, int self_red_cou
 	      }
 
 	      if(win_count == compatible_configuration_count) {
-		parent_table.set(configuration_id, v_lose);
+		parent_table.set(configuration_id, v_loss);
 		fl_assignment_count++, label_update_count++;
-		label = v_lose;
+		label = v_loss;
 	      }
 	    }
 	  }
@@ -460,13 +460,13 @@ static void run_coordinator(int iteration, int self_blue_count, int self_red_cou
   
   cout << "[output] Writing database: " << output_database_path << endl;
   {
-    OutTable out_table(iteration, output_database_path, configuration_count, 2);
+    TableWriter table_writer(iteration, output_database_path, configuration_count, 2);
     for (unsigned long long int i = 0; i < configuration_count; i++) {
       // retrieve the label of configuration_id(i) and copy it directly
-      out_table.write(parent_table.get(i));
+      table_writer.write(parent_table.get(i));
     }
-    out_table.flush();
-    out_table.outinfo();
+    table_writer.flush();
+    table_writer.print_statistics();
   }
   
   {
